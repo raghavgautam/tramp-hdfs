@@ -114,7 +114,8 @@
     ))
 
 ;;;###autoload
-(tramp-set-completion-function "hdfs" tramp-completion-function-alist-ssh)
+(eval-after-load 'tramp
+  '(tramp-set-completion-function "hdfs" tramp-completion-function-alist-ssh))
 
 (defconst tramp-hdfs-errors
   (mapconcat
