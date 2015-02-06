@@ -86,7 +86,7 @@
   :type 'string
   :version "24.3")
 
-(defcustom hdfs-default-dir "."
+(defcustom hdfs-default-dir "/"
   "hdfs default directory"
   :group 'tramp
   :type 'string
