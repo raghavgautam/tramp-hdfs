@@ -32,7 +32,7 @@
 
 (require 'tramp)
 (require 'tramp-sh)
-
+(require 'time-date)
 ;; Pacify byte-compiler.
 (eval-when-compile
   (require 'cl))
@@ -527,8 +527,8 @@ pass to the OPERATION."
 				 (or gid "nogroup") ; gid
 				 (or size "0") ; size
 				 (format-time-string
-				  (if (tramp-time-less-p
-				       (tramp-time-subtract (current-time) mtime)
+				  (if (time-less-p
+				       (time-subtract (current-time) mtime)
 				       tramp-half-a-year)
 				      "%b %e %R"
 				    "%b %e  %Y")
@@ -640,7 +640,7 @@ Result is the list (FNAME MODE SIZE MTIME)."
 	      owner  (match-string 3  line)
 	      group  (match-string 4  line)
 	      size   (when (match-string 5 line)
-		       (string-to-int (match-string 5 line)))
+		       (string-to-number (match-string 5 line)))
 	      mtime (encode-time
 		     0
 		     ;;atime stats			     
