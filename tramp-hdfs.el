@@ -1,4 +1,4 @@
-;;; tramp-hdfs.el --- Tramp access functions for hdfs file system
+;;; tramp-hdfs.el --- Tramp extension to access hadoop/hdfs file system in Emacs
 
 ;; Copyright (C) 2008-2014  The Tramp HDFS Developers
 ;;
@@ -13,7 +13,7 @@
 ;; along with tramp-hdfs.  If not, see <http://www.gnu.org/licenses/>.
 ;;
 ;;; Commentary:
-;; Access hdfs over Tramp.
+;; Access hadoop/hdfs over Tramp.
 ;; This program uses ssh to login to another machine that has hdfs client to access hdfs.
 ;; It then fires hdfs commands to do ls or fetch files.
 ;;
