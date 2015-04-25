@@ -98,12 +98,13 @@
     (directory-files-and-attributes . tramp-handle-directory-files-and-attributes)
     (dired-call-process . ignore)
     (dired-compress-file . ignore)
+    ;;(dired-recursive-delete-directory . 
     (dired-uncache . tramp-handle-dired-uncache)
     (expand-file-name . tramp-hdfs-handle-expand-file-name)
     (file-accessible-directory-p . tramp-hdfs-handle-file-directory-p)
     (file-acl . ignore)
     (file-attributes . tramp-hdfs-handle-file-attributes)
-    (file-directory-p .  tramp-hdfs-handle-file-directory-p)
+    (file-directory-p . tramp-hdfs-handle-file-directory-p)
     (file-executable-p . tramp-handle-file-exists-p)
     (file-exists-p . tramp-handle-file-exists-p)
     ;; `file-in-directory-p' performed by default handler.
@@ -118,7 +119,7 @@
     (file-notify-add-watch . tramp-handle-file-notify-add-watch)
     (file-notify-rm-watch . tramp-handle-file-notify-rm-watch)
     (file-ownership-preserved-p . ignore)
-    (file-readable-p . tramp-handle-file-exists-p)
+    (file-readable-p . tramp-sh-handle-file-readable-p)
     (file-regular-p . tramp-handle-file-regular-p)
     (file-remote-p . tramp-handle-file-remote-p)
     ;; `file-selinux-context' performed by default handler.
@@ -128,11 +129,12 @@
     ;; `get-file-buffer' performed by default handler.
     (insert-directory . tramp-hdfs-handle-insert-directory)
     (insert-file-contents . tramp-handle-insert-file-contents)
+    (insert-file-contents-literally . ignore)
     (load . tramp-handle-load)
     (make-auto-save-file-name . ignore)
     (make-directory . ignore)
-    (make-directory-internal . ignore)
     (make-symbolic-link . ignore)
+    (process-file . ignore)
     (rename-file . ignore)
     (set-file-acl . ignore)
     (set-file-modes . ignore)
@@ -144,9 +146,8 @@
     (unhandled-file-name-directory . tramp-handle-unhandled-file-name-directory)
     (vc-registered . ignore)
     (verify-visited-file-modtime . tramp-handle-verify-visited-file-modtime)
-    (write-region . ignore)
-    )
-  "Alist of handler functions for Tramp hdfs method.
+    (write-region . ignore))
+  "Alist of handler functions.
 Operations not mentioned here will be handled by the default Emacs primitives.")
 
 ;; It must be a `defsubst' in order to push the whole code into
