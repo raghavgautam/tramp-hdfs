@@ -1,6 +1,6 @@
 ;;; tramp-hdfs.el --- Tramp extension to access hadoop/hdfs file system in Emacs
 
-;; Copyright (C) 2008-2014  The Tramp HDFS Developers
+;; Copyright (C) 2008-2014  The Tramp HDFS2 Developers
 ;;
 ;; Version 0.3.0
 ;; Author: Raghav Kumar Gautam <raghav@apache.org>
@@ -33,85 +33,37 @@
 (require 'tramp)
 (require 'tramp-sh)
 (require 'time-date)
+(require 'json)
+(require 'url)
+
 ;; Pacify byte-compiler.
 (eval-when-compile
   (require 'cl))
 
-;; Define hdfs method ...
-(defcustom hdfs-ls "hdfs dfs -ls"
-  "hdfs list command to list file/dir"
-  :group 'tramp
-  :type 'string
-  :version "24.3")
 
-(defcustom hdfs-ls-one "hdfs dfs -ls -d"
-  "hdfs list command to list one file/dir"
-  :group 'tramp
-  :type 'string
-  :version "24.3")
+(defconst tramp-hdfs-method "hdfs"  "Method to connect HDFS2 servers.")
+(defconst hdfs-status-op "GETFILESTATUS"  "Rest operation for getting status of one file.")
+(defconst hdfs-open-op "OPEN"  "Rest operation for getting content of a file.")
+(defconst hdfs-list-op "LISTSTATUS"  "Rest operation for listing a dir.")
+(defconst hdfs-delete-op "DELETE"  "Rest operation for deleting a file/dir.")
 
-(defcustom hdfs-cat "hdfs dfs -cat"
-  "hdfs list command to list one file/dir"
-  :group 'tramp
-  :type 'string
-  :version "24.3")
+(defcustom hdfs-default-dir "/"  "hdfs default directory"  :group 'tramp  :type 'string  :version "24.3")
+(defcustom hdfs-bigfile-threshold (* 1024 1024)  "hdfs list command to list one file/dir"  :group 'tramp-hdfs  :type 'integer)
+(defcustom webhdfs-port 50070 "Port number of WebHDFS server." :group 'tramp-hdfs :type 'integer)
+(defcustom webhdfs-endpoint "/webhdfs/v1" "Port number of WebHDFS server." :group 'tramp-hdfs :type 'string)
 
-(defcustom hdfs-tail "hdfs dfs -tail"
-  "hdfs list command to list one file/dir"
-  :group 'tramp
-  :type 'string
-  :version "24.3")
 
-(defcustom hdfs-bigfile-threshold (* 1024 1024)
-  "hdfs list command to list one file/dir"
-  :group 'tramp
-  :type 'int
-  :version "24.3")
-
-(defcustom hdfs-del "hdfs dfs -rm"
-  "hdfs delete command to delete one file"
-  :group 'tramp
-  :type 'string
-  :version "24.3")
-
-(defcustom hdfs-del-dir "hdfs dfs -rmdir"
-  "hdfs delete command to delete one dir"
-  :group 'tramp
-  :type 'string
-  :version "24.3")
-
-(defcustom hdfs-del-dir-recursive "hdfs dfs -rm -rf "
-  "hdfs delete command to delete one dir recursively"
-  :group 'tramp
-  :type 'string
-  :version "24.3")
-
-(defcustom hdfs-default-dir "/"
-  "hdfs default directory"
-  :group 'tramp
-  :type 'string
-  :version "24.3")
-
-(defconst tramp-hdfs-method "hdfs"
-  "Method to connect HDFS servers.")
+(add-to-list 'tramp-default-user-alist
+	     `(,(concat
+		 "\\`"
+		 (regexp-opt '("hdfs"))
+		 "\\'")
+	       nil ,(user-login-name)))
 
 ;; ... and add it to the method list.
 ;;;###tramp-autoload
 (add-to-list 'tramp-methods
-  `(,tramp-hdfs-method
-    (tramp-login-program        "ssh")
-    (tramp-login-args           (("-l" "%u") ("-p" "%p") ("%c")
-				 ("-e" "none") ("%h")))
-    (tramp-async-args           (("-q")))
-    (tramp-remote-shell         "/bin/bash")
-    (tramp-remote-shell-args    ("-c"))
-    (tramp-gw-args              (("-o" "GlobalKnownHostsFile=/dev/null")
-				 ("-o" "UserKnownHostsFile=/dev/null")
-				 ("-o" "StrictHostKeyChecking=no")))
-    (tramp-default-port         22)
-    (tramp-connection-timeout   10)
-    ;;(tramp-tmpdir "/tmp/tramp")
-    ))
+	     `(,tramp-hdfs-method))
 
 ;;;###autoload
 (eval-after-load 'tramp
@@ -184,7 +136,7 @@
     (set-file-selinux-context . ignore)
     (set-file-times . ignore)
     (set-visited-file-modtime . tramp-handle-set-visited-file-modtime)
-    (shell-command . tramp-handle-shell-command)
+    (shell-command . ignore)
     (start-file-process . ignore)
     (unhandled-file-name-directory . tramp-handle-unhandled-file-name-directory)
     (vc-registered . ignore)
@@ -211,7 +163,7 @@ pass to the OPERATION."
 	     (string-prefix-p "/hdfs:" (car args))
 	     ;;remove frequent operations
 	     )
-    (tramp-debug-message (tramp-dissect-file-name (car args)) "operation %s args %s" operation args))
+    (tramp-debug-message (tramp-dissect-file-name (car args)) "-> %s"(pp-to-string (cons operation args))))
   (let ((fn (assoc operation tramp-hdfs-file-name-handler-alist)))
     (if fn
 	(save-match-data (apply (cdr fn) args))
@@ -222,29 +174,21 @@ pass to the OPERATION."
 	     (cons 'tramp-hdfs-file-name-p 'tramp-hdfs-file-name-handler))
 
 
-;; File name primitives.
 (defun tramp-hdfs-handle-delete-directory (directory &optional recursive)
   "Like `delete-directory' for Tramp files."
   (setq directory (directory-file-name (expand-file-name directory)))
-  (let ((del-command hdfs-del-dir))
-    (when recursive
-      (setq del-command hdfs-del-dir-recursive))
-    (with-parsed-tramp-file-name directory nil
-      ;; We must also flush the cache of the directory, because
-      ;; `file-attributes' reads the values from there.
-      (tramp-flush-file-property v (file-name-directory localname))
-      (tramp-flush-directory-property v localname)
-      (unless (tramp-hdfs-send-command
-	       v (format
-		  "%s \"%s\""
-		  del-command
-		  (tramp-hdfs-get-filename v)))
-	;; Error.
-	(with-current-buffer (tramp-get-connection-buffer v)
-	  (goto-char (point-min))
-	  (search-forward-regexp tramp-hdfs-errors nil t)
-	  (tramp-error
-	   v 'file-error "%s `%s'" (match-string 0) directory))))))
+  (with-parsed-tramp-file-name directory nil
+    ;; We must also flush the cache of the directory, because
+    ;; `file-attributes' reads the values from there.
+    (tramp-flush-file-property v (file-name-directory localname))
+    (tramp-flush-directory-property v localname)
+    (let ((url (tramp-hdfs-create-url
+		(tramp-hdfs-get-filename v)
+		hdfs-delete-op
+		v
+		(if recursive "recursive=true" "recursive=false"))))
+      (tramp-hdfs-json-to-lisp (tramp-hdfs-delete-url url) v)
+      t)))
 
 (defun tramp-hdfs-handle-delete-file (filename &optional _trash)
   "Like `delete-file' for Tramp files."
@@ -255,14 +199,13 @@ pass to the OPERATION."
       ;; `file-attributes' reads the values from there.
       (tramp-flush-file-property v (file-name-directory localname))
       (tramp-flush-file-property v localname)
-      (tramp-hdfs-send-command
-	       v (concat hdfs-del  " \"" (tramp-hdfs-get-filename v) "\"" ))
-	;; Error.
-	(with-current-buffer (tramp-get-connection-buffer v)
-	  (goto-char (point-min))
-	  (when (search-forward-regexp tramp-hdfs-errors nil t)
-	    (tramp-error
-	     v 'file-error "%s `%s'" (match-string 0) filename))))))
+      (let ((url (tramp-hdfs-create-url
+		(tramp-hdfs-get-filename v)
+		hdfs-delete-op
+		v
+		"recursive=false")))
+	(tramp-hdfs-json-to-lisp (tramp-hdfs-delete-url url) v))
+      t)))
 
 (defun tramp-hdfs-handle-directory-files
   (directory &optional full match nosort)
@@ -289,85 +232,149 @@ pass to the OPERATION."
       (add-to-list 'res elt 'append))))
 
 (defun tramp-hdfs-handle-expand-file-name (name &optional dir)
-  (with-parsed-tramp-file-name (if (tramp-connectable-p name) name dir) nil
-    (tramp-hdfs-maybe-open-connection v)
-    (tramp-sh-handle-expand-file-name name dir)))
+  "Like `expand-file-name' for Tramp files.
+If the localname part of the given file name starts with \"/../\" then
+the result will be a local, non-Tramp, file name."
+  ;; If DIR is not given, use `default-directory' or "/".
+  (setq dir (or dir default-directory "/"))
+  ;; Unless NAME is absolute, concat DIR and NAME.
+  (unless (file-name-absolute-p name)
+    (setq name (concat (file-name-as-directory dir) name)))
+  ;; If NAME is not a Tramp file, run the real handler.
+  (if (not (tramp-connectable-p name))
+      (tramp-run-real-handler 'expand-file-name (list name nil))
+    ;; Dissect NAME.
+    (with-parsed-tramp-file-name name nil
+      (unless (tramp-run-real-handler 'file-name-absolute-p (list localname))
+	(setq localname (concat "/" localname)))
+      ;; There might be a double slash, for example when "~/"
+      ;; expands to "/".  Remove this.
+      (while (string-match "//" localname)
+	(setq localname (replace-match "/" t t localname)))
+      ;; No tilde characters in file name, do normal
+      ;; `expand-file-name' (this does "/./" and "/../").  We bind
+      ;; `directory-sep-char' here for XEmacs on Windows, which would
+      ;; otherwise use backslash.  `default-directory' is bound,
+      ;; because on Windows there would be problems with UNC shares or
+      ;; Cygwin mounts.
+      (let ((directory-sep-char ?/)
+	    (default-directory (tramp-compat-temporary-file-directory)))
+	(tramp-make-tramp-file-name
+	 method user host
+	 (tramp-drop-volume-letter
+	  (tramp-run-real-handler
+	   'expand-file-name (list localname)))
+	 hop)))))
 
 (defun tramp-hdfs-handle-file-attributes (filename &optional id-format)
   "Like `file-attributes' for Tramp files."
   (unless id-format (setq id-format 'integer))
   (ignore-errors
-    (with-parsed-tramp-file-name filename nil
+    (with-parsed-tramp-file-name (expand-file-name filename) nil
       (with-tramp-file-property
 	  v localname (format "file-attributes-%s" id-format)
-	(tramp-hdfs-do-file-attributes-with-stat v id-format))))) ;11 file system number
+	(ignore-errors (tramp-hdfs-do-file-attributes-with-stat v id-format))))))
 
-;;(progn (tramp-cleanup-all-buffers) (tramp-cleanup-all-connections))
-;;manually open /hdfs:root@node-1:/user/
 (defun tramp-hdfs-do-file-attributes-with-stat (vec &optional id-format)
   "Implement `file-attributes' for Tramp files using stat command."
   (tramp-message
    vec 5 "file attributes with stat: %s" (tramp-file-name-localname vec))
-  (tramp-hdfs-maybe-open-connection vec)
-  (with-current-buffer (tramp-get-connection-buffer vec)
-    (let* ((localname (tramp-hdfs-get-filename vec))
-	   size id replication uid gid atime mtime ctime mode inode ignore)
-      (when (zerop (length localname))
-	(setq localname hdfs-default-dir))
-      (when (tramp-hdfs-send-command
-	     vec (concat hdfs-ls-one  " \"" localname "\"" ))
+  (let* ((localname (tramp-hdfs-get-filename vec))
+	 (url (tramp-hdfs-create-url localname hdfs-status-op vec))
+	 (file-status (cdar (tramp-hdfs-json-to-lisp (tramp-hdfs-get-url-content url) vec))))
+    (tramp-hdfs-decode-file-status file-status vec)))
 
-	(goto-char (point-min))
-	(when (re-search-forward tramp-hdfs-errors nil t)
-	  (tramp-error vec 'file-error "%s" (match-string 0)))
+(defun file-modes-number-to-string (mode-num)
+  "Convert permission like 766 to rwx-wx-wx"
+  (when (string-match "[0-7]?\\([0-7]\\{3\\}\\)" mode-num)
+    (let ((perm (match-string 1 mode-num)))
+      (let ((res ""))
+	(dolist (p (delete "" (split-string perm "")) res)
+	  (setq res
+		(concat res
+			(let ((one-digit (string-to-number p)))
+			  (concat (if (= 4 (logand 4 one-digit)) "r" "-")
+				  (if (= 2 (logand 2 one-digit)) "w" "-")
+				  (if (= 1 (logand 1 one-digit)) "x" "-"))))))))))
 
-	;; Loop the listing.
-	(while (not (eobp))
-	  (if (looking-at
-	       (concat "^\\([-d][-drwxt]\\{9\\}\\)"
-		       "[ ]+\\([-0-9]+\\)"
-		       "[ ]\\([_[:alnum:]]+\\)"
-		       "[ ]+\\([_[:alnum:]]+\\)"
-		       "[ ]+\\([[:digit:]]+\\)"
-		       "[ ]+\\([[:digit:]]\\{4\\}\\)"
-		       "[-]+\\([[:digit:]]\\{2\\}\\)"
-		       "[-]+\\([[:digit:]]\\{2\\}\\)"
-		       "[ ]+\\([[:digit:]]\\{2\\}\\)"
-		       "[:]+\\([[:digit:]]\\{2\\}\\)"
-		       "[ ]\\([^ ]+\\)"
-		       ))
-	      (setq mode        (match-string 1 )
-		    replication (string-to-number (match-string 2 ))
-		    uid         (match-string 3 )
-		    gid         (match-string 4 )
-		    size        (string-to-number (match-string 5 ))
-		    mtime (encode-time
-			   0
-			   ;;atime stats			     
-			   (string-to-number (match-string 10))
-			   (string-to-number (match-string  9))
-			   (string-to-number (match-string  8))
-			   (string-to-number (match-string  7))
-			   (string-to-number (match-string  6)))
-		    ignore (match-string 11)
-		    id     (if (string-equal (substring mode 0 1) "d") t
-			     "file")))
-	  (forward-line)))
-      
-      ;; Return the result.
-					;(list id replication uid gid '(0 0) mtime '(0 0) size mode nil inode (tramp-get-device vec))
-      (when mode (list id replication uid gid '(0 0) mtime '(0 0) size mode nil inode (tramp-get-device vec))))))
+
+;;hadoop rest api https://hadoop.apache.org/docs/r1.0.4/webhdfs.html
+(defun tramp-hdfs-get-url-content (url)
+  (with-current-buffer (url-retrieve-synchronously url)
+    (delete-region (point-min) url-http-end-of-headers)
+    (buffer-substring (1+ (point-min)) (point-max))))
+
+(defun tramp-hdfs-delete-url (url)
+  (let* ((url-request-method "DELETE"))
+    (with-current-buffer (url-retrieve-synchronously url)
+      (delete-region (point-min) url-http-end-of-headers)
+      (buffer-substring (1+ (point-min)) (point-max)))))
+
+(defun tramp-hdfs-put-url-get-redirect (url)
+  (let* ((url-request-method "PUT")
+	 ;;(url-request-extra-headers '(("Content-Type" . "application/octet-stream")))
+	 ;;(url-honor-refresh-requests t)
+	 (url-debug t)
+	 (url-request-data "xxx")
+	 (buff (url-retrieve-synchronously url))
+	)
+    (when buff
+      (with-current-buffer buff
+	(buffer-string)))))
+
+;;(tramp-hdfs-put-url-get-redirect "http://node-1:50070/webhdfs/v1/tmp/test2.txt?user.name=rgautam&op=CREATE")
+
+
+(defun tramp-hdfs-create-url (path op v &optional suffix)
+  (unless (string-match-p "^/" path)
+    (setq path (concat "/" path)))
+  (let ((url (concat
+	      ;;http://node-1:57000/webhdfs/v1
+	      (format "http://%s:%s%s" (tramp-file-name-real-host v) (number-to-string webhdfs-port) webhdfs-endpoint)
+	      ;;/tmp?user.name=root&op=OPEN
+	      (format "%s?user.name=%s&op=%s"  path (tramp-file-name-user v) op)
+	      (when suffix "&") suffix)))
+    (tramp-debug-message v "Constructed url: %s" url)
+    url))
+
+(defun tramp-hdfs-json-to-lisp (string vec)
+  (let* ((lisp-data (json-read-from-string string))
+	 (exception (assoc 'RemoteException lisp-data)))
+    (if exception
+	(let ((error-message (cdr (assoc 'message exception))))
+	  (tramp-error vec 'file-error "%s" error-message))
+      lisp-data)))
+
+(defun tramp-hdfs-decode-file-status (file-status vec)
+  "Decode assoc list to appropriate status."
+  (let* ((dir? (string= (cdr (assoc 'type file-status)) "DIRECTORY"))
+	 (replication (cdr (assoc 'replication file-status)))
+	 (uid         (cdr (assoc 'owner       file-status)))
+	 (gid         (cdr (assoc 'group       file-status)))
+	 (access-time '(0 0))
+	 (modification-time (seconds-to-time (/ (cdr (assoc 'modificationTime file-status)) 1000.0)))
+	 (status-change-time '(0 0))
+	 (size        (cdr (assoc 'length      file-status)))
+	 (mode        (concat
+		       (if dir? "d" "-")
+		       (file-modes-number-to-string (cdr (assoc 'permission  file-status)))))
+	 (ignore nil)
+	 (inode nil)
+	 (device (tramp-get-device vec)))
+    ;;(pp file-status)
+    (list dir? replication uid gid access-time modification-time status-change-time size mode ignore inode device)))
 
 (defun tramp-hdfs-handle-file-directory-p (filename)
   "Like `file-directory-p' for Tramp files."
   (and (file-exists-p filename)
        (eq ?d (aref (nth 8 (file-attributes filename)) 0))))
 
-(defun tramp-hdfs-use-tail-p (filesize)
-  (if (and (> filesize hdfs-bigfile-threshold)
-	   (yes-or-no-p (format "Warning: file size = %sB is larger than %sB - should I open tail of file? " (file-size-human-readable filesize) (file-size-human-readable hdfs-bigfile-threshold))))
-      t
-    nil))
+(defun tramp-hdfs-get-size-params (size)
+  "Get url parameters needed for this file size."
+  (when (> size hdfs-bigfile-threshold)
+    (let ((start-offset (read-number (format "The requested file is %s bytes (=%s) long. Recommending fetching part of the file. Please enter start offset(starting at zero): " size (file-size-human-readable size))))
+	  (length (read-number "Length of the part that you wish to fetch:")))
+      (format "offset=%s&length=%s" start-offset length))))
 
 (defun tramp-hdfs-handle-file-local-copy (filename)
   "Like `file-local-copy' for Tramp files."
@@ -378,72 +385,17 @@ pass to the OPERATION."
        "Cannot make local copy of non-existing file `%s'" filename))
 
     (let* ((size (nth 7 (file-attributes (file-truename filename))))
-	   (hdfs-cat-cmd (if (tramp-hdfs-use-tail-p size) hdfs-tail
-			   hdfs-cat))
-	   (rem-enc (tramp-get-inline-coding v "remote-encoding" size))
-	   (loc-dec (tramp-get-inline-coding v "local-decoding" size))
+	   (localname (tramp-hdfs-get-filename v))
+	   (url-size-params (tramp-hdfs-get-size-params size))
+	   (url (tramp-hdfs-create-url localname hdfs-open-op v url-size-params))
+	   (content (tramp-hdfs-get-url-content url))
 	   (tmpfile (tramp-compat-make-temp-file filename)))
-
-      (condition-case err
-	  (cond
-	   ;; Use inline encoding for file transfer.
-	   (rem-enc
-	    (save-excursion
-	      (with-tramp-progress-reporter
-	       v 3
-	       (format "Encoding remote file `%s' with `%s'" filename rem-enc)
-	       (tramp-barf-unless-okay
-		v (format rem-enc (concat " <(" hdfs-cat-cmd " " (tramp-shell-quote-argument localname) ")"))
-		"Encoding remote file failed"))
-
-	      (with-tramp-progress-reporter
-		  v 3 (format "Decoding local file `%s' with `%s'"
-			      tmpfile loc-dec)
-		(if (functionp loc-dec)
-		    ;; If local decoding is a function, we call it.
-		    ;; We must disable multibyte, because
-		    ;; `uudecode-decode-region' doesn't handle it
-		    ;; correctly.
-		    (with-temp-buffer
-		      (set-buffer-multibyte nil)
-		      (insert-buffer-substring (tramp-get-buffer v))
-		      (funcall loc-dec (point-min) (point-max))
-		      ;; Unset `file-name-handler-alist'.  Otherwise,
-		      ;; epa-file gets confused.
-		      (let (file-name-handler-alist
-			    (coding-system-for-write 'binary))
-			(write-region
-			 (point-min) (point-max) tmpfile nil 'no-message)))
-
-		  ;; If tramp-decoding-function is not defined for this
-		  ;; method, we invoke tramp-decoding-command instead.
-		  (let ((tmpfile2 (tramp-compat-make-temp-file filename)))
-		    ;; Unset `file-name-handler-alist'.  Otherwise,
-		    ;; epa-file gets confused.
-		    (let (file-name-handler-alist
-			  (coding-system-for-write 'binary))
-		      (with-current-buffer (tramp-get-buffer v)
-			(write-region
-			 (point-min) (point-max) tmpfile2 nil 'no-message)))
-		    (unwind-protect
-			(tramp-call-local-coding-command
-			 loc-dec tmpfile2 tmpfile)
-		      (delete-file tmpfile2)))))
-
-	      ;; Set proper permissions.
-	      (set-file-modes tmpfile (tramp-default-file-modes filename))
-	      ;; Set local user ownership.
-	      (tramp-set-file-uid-gid tmpfile)))
-
-	   ;; Oops, I don't know what to do.
-	   (t (tramp-error
-	       v 'file-error "Wrong method specification for `%s'" method)))
-
-	;; Error handling.
-	((error quit)
-	 (delete-file tmpfile)
-	 (signal (car err) (cdr err))))
-
+      (let ((coding-system-for-write 'no-conversion)) (write-region content nil tmpfile))
+      ;; Set proper permissions.
+      (set-file-modes tmpfile (tramp-default-file-modes filename))
+      ;; Set local user ownership.
+      (tramp-set-file-uid-gid tmpfile)
+      (message "Written content to: %s %s %s" tmpfile (md5 content) (md5 tmpfile))
       (run-hooks 'tramp-handle-file-local-copy-hook)
       tmpfile)))
 
@@ -453,15 +405,50 @@ pass to the OPERATION."
    filename
    (with-parsed-tramp-file-name directory nil
      (with-tramp-file-property v localname "file-name-all-completions"
-       (save-match-data
-	 (let ((entries (tramp-hdfs-get-file-entries directory)))
-	   (mapcar
-	    (lambda (x)
-	      (list
-	       (if (string-match "d" (nth 1 x))
-		   (file-name-as-directory (nth 0 x))
-		 (nth 0 x))))
-	    entries)))))))
+       (let ((file-list (tramp-hdfs-list-directory v)))
+	 (mapcar
+	  (lambda (one-status)
+	    (let* ((dir? (string= (cdr (assoc 'type one-status)) "DIRECTORY")))
+	      (concat (cdr (assoc 'pathSuffix one-status)) (when dir? "/"))))
+	  file-list))))))
+
+(defun tramp-hdfs-create-one-line (file-status vec)
+  "Decode assoc list to a line that can be inserted in the tramp buffer."
+  (let* ((decoded-status (tramp-hdfs-decode-file-status file-status vec))
+	 (dir?         (first  decoded-status))
+	 (replication  (second decoded-status))
+	 (uid          (third  decoded-status))
+	 (gid          (fourth decoded-status))
+	 ;;access time is not required
+	 (mtime        (sixth decoded-status))
+	 ;;status change time is not needed
+	 (size         (eighth decoded-status))
+	 (mode         (ninth  decoded-status))
+	 ;;ninth element is always nil
+	 ;;tenth element is always nil
+	 (device       (nth 12 decoded-status))
+	 (filename (concat (cdr (assoc 'pathSuffix file-status)) (when dir? "/"))))
+    (format
+     "%10s %3s %-10s %-10s %8s %s %s\n"
+     (or mode "----------") ; mode
+     (or replication "-") ; inode
+     (or uid "nobody") ; uid
+     (or gid "nogroup") ; gid
+     (or size "0") ; size
+     (format-time-string
+      (if (time-less-p
+	   (time-subtract (current-time) mtime)
+	   tramp-half-a-year)
+	  "%b %e %R"
+	"%b %e  %Y")
+      mtime)
+     filename)))
+
+(defun tramp-hdfs-list-directory (v)
+  "List files of a hdfs dir."
+  (let* ((url (tramp-hdfs-create-url (tramp-hdfs-get-filename v) hdfs-list-op v))
+	 (retval (tramp-hdfs-json-to-lisp (tramp-hdfs-get-url-content url) v)))
+    (cdadar retval)))
 
 (defun tramp-hdfs-handle-insert-directory
     (filename switches &optional wildcard full-directory-p)
@@ -474,224 +461,15 @@ pass to the OPERATION."
     (setq filename (directory-file-name filename)))
   (with-parsed-tramp-file-name filename nil
     (save-match-data
-      ;;we don't know what to do with switches and other options
-      (let ((cur-buf (current-buffer))
-	    dired-content
-	    mode replication uid gid size mtime fullname)
-	(when (tramp-hdfs-send-command
-	       v (concat hdfs-ls  " \"" (tramp-hdfs-get-filename v) "\"" ))
-	  (with-current-buffer (tramp-get-connection-buffer v)
-	    ;; Loop the listing.
-	    (goto-char (point-min))
-	    (when (re-search-forward tramp-hdfs-errors nil t)
-	      (tramp-error v 'file-error "%s" (match-string 0)))
-	    (while (not (eobp))
-	      (beginning-of-line)
-	      (setq dired-content "")
-	      (if (looking-at
-		   (concat "^\\([-d][-drwxt]\\{9\\}\\)"
-			   "[ ]+\\([-0-9]+\\)"
-			   "[ ]\\([-_[:alnum:]]+\\)"
-			   "[ ]+\\([-_[:alnum:]]+\\)"
-			   "[ ]+\\([[:digit:]]+\\)"
-			   "[ ]+\\([[:digit:]]\\{4\\}\\)"
-			   "[-]+\\([[:digit:]]\\{2\\}\\)"
-			   "[-]+\\([[:digit:]]\\{2\\}\\)"
-			   "[ ]+\\([[:digit:]]\\{2\\}\\)"
-			   "[:]+\\([[:digit:]]\\{2\\}\\)"
-			   "[ ]\\([^ ]+\\)$"))
-		  (progn (setq mode        (match-string 1)
-			       replication (match-string 2)
-			       uid         (match-string 3)
-			       gid         (match-string 4)
-			       size        (match-string 5)
-			       fullname (match-string 11)
-			       mtime (encode-time
-				      0
-				      ;;mtime stats			     
-				      (string-to-number (match-string 10))
-				      (string-to-number (match-string  9))
-				      (string-to-number (match-string  8))
-				      (string-to-number (match-string  7))
-				      (string-to-number (match-string  6)))
-					;		      id     (if (string-equal (substring mode 0 1) "d") t "file")
-			       )
-			 (setq dired-content
-			       (concat
-				dired-content
-				(format
-				 "%10s %3s %-10s %-10s %8s %s "
-				 (or mode "----------") ; mode
-				 (or replication "-") ; inode
-				 (or uid "nobody") ; uid
-				 (or gid "nogroup") ; gid
-				 (or size "0") ; size
-				 (format-time-string
-				  (if (time-less-p
-				       (time-subtract (current-time) mtime)
-				       tramp-half-a-year)
-				      "%b %e %R"
-				    "%b %e  %Y")
-				  mtime))))
-			 (let ((start (point)))
-			   (setq
-			    dired-content
-			    (concat
-			     dired-content
-			     (format	"%s\n" (file-name-nondirectory fullname)))
-					;(put-text-property start (1- (point)) 'dired-filename t) ;;can use propertizie
-			    )))
-		;;insert the line
-		(setq dired-content
-		      (concat dired-content (buffer-substring (point) (point-at-eol)) "\n")))
-	      (forward-line)
-	      (with-current-buffer cur-buf (insert dired-content)))))))))
+      (with-current-buffer (current-buffer)
+	(insert
+	 (let* ((file-list (tramp-hdfs-list-directory v)))
+	   (mapconcat (lambda (one-status) (tramp-hdfs-create-one-line one-status v)) file-list "")))))))
 
 ;; Internal file name functions.
-(defun tramp-hdfs-get-share (vec)
-  "Returns the share name of LOCALNAME."
-  ;;(throw nil "this does not make sense for hdfs")
-  (save-match-data
-    (let ((localname (tramp-file-name-localname vec)))
-      (when (string-match "^/?\\(.+\\)/" localname)
-	(match-string 1 localname)))))
-
 (defun tramp-hdfs-get-filename (vec)
-  "Returns the file name of LOCALNAME.
-If VEC has no cifs capabilities, exchange \"/\" by \"\\\\\"."
+  "Returns the file name of vec."
   (elt vec 3))
-
-(defun tramp-hdfs-get-file-entries (directory)
-  "Read entries which match DIRECTORY.
-Either the shares are listed, or the `dir' command is executed.
-Result is a list of (LOCALNAME MODE SIZE MONTH DAY TIME YEAR)."
-  (with-parsed-tramp-file-name (file-name-as-directory directory) nil
-    (when (zerop (length localname))
-      (setq localname hdfs-default-dir))
-    (with-tramp-file-property v localname "file-entries"
-      (with-current-buffer (tramp-get-connection-buffer v)
-	(let* (;;(share (tramp-hdfs-get-share v))
-	       ;;(cache (tramp-get-connection-property v "share-cache" nil))
-	       (res nil)
-	       (entry nil))
-
-	  ;;(if (and (not share) cache)
-	      ;; Return cached shares.
-	    ;;  (setq res cache)
-
-	    ;; Read entries.
-	    (tramp-hdfs-send-command
-	    ;;(tramp-send-string
-	     v (format (concat hdfs-ls " \"%s\"") (elt v 3)))
-	    ;; Loop the listing.
-	    (goto-char (point-min))
-	    (current-buffer)
-	    (if ;;(ignore-errors
-		  (re-search-forward tramp-hdfs-errors nil t)
-		;;)
-		(tramp-error v 'file-error "%s `%s'" (match-string 0) directory)
-	      (while (not (eobp))
-		(setq entry (tramp-hdfs-read-file-entry v))
-		(forward-line)
-		(when entry (push entry res))))
-
-	    ;; Cache share entries.
-	    ;;(unless share
-	      ;;(tramp-set-connection-property v "share-cache" res)))
-
-	  ;; Add directory itself.
-	  ;;(push '("" "drwxrwxrwx" 0 (0 0)) res)
-
-	  ;; Return entries.
-	  (delq nil res))))))
-
-
-(defun tramp-hdfs-read-file-entry (vec)
-  "Parse entry in hdfs output buffer.
-Result is the list (FNAME MODE SIZE MTIME)."
-;; We are called from `tramp-hdfs-get-file-entries', which sets the
-;; current buffer.
-  (let* ((basepath (elt vec 3))
-	 (line (buffer-substring (point) (point-at-eol)))
-	 (basedir-name (if (string-match "/$" basepath)
-			   basepath
-			 (concat basepath "/")))
-	 (basedir-offset (if (string-equal basedir-name "./")
-			     0
-			   (length basedir-name)))
-	 fullname file-name nlinks owner group mode size mtime)
-    ;; Real listing.
-    (if (string-match
-	 (concat "^\\([-d][-drwxt]\\{9\\}\\)"
-		 "[ ]+\\([-0-9]+\\)"
-		 "[ ]\\([-_[:alnum:]]+\\)"
-		 "[ ]+\\([-_[:alnum:]]+\\)"
-		 "[ ]+\\([[:digit:]]+\\)"
-		 "[ ]+\\([[:digit:]]\\{4\\}\\)"
-		 "[-]+\\([[:digit:]]\\{2\\}\\)"
-		 "[-]+\\([[:digit:]]\\{2\\}\\)"
-		 "[ ]+\\([[:digit:]]\\{2\\}\\)"
-		 "[:]+\\([[:digit:]]\\{2\\}\\)"
-		 "[ ]\\([^ ]+\\)$"
-		 )
-	 line)
-	(setq mode   (match-string 1  line)
-	      nlinks (match-string 2  line)
-	      owner  (match-string 3  line)
-	      group  (match-string 4  line)
-	      size   (when (match-string 5 line)
-		       (string-to-number (match-string 5 line)))
-	      mtime (encode-time
-		     0
-		     ;;atime stats			     
-		     (string-to-number (match-string 10))
-		     (string-to-number (match-string  9))
-		     (string-to-number (match-string  8))
-		     (string-to-number (match-string  7))
-		     (string-to-number (match-string  6)))
-	      fullname  (match-string 11 line)
-	      file-name (substring fullname basedir-offset)))
-    (when (and fullname mode size)
-      (when (and (string-match "^d" mode)
-		 (not (string-match "/$" file-name)))
-	(setq file-name (concat file-name "/")))
-      (tramp-set-file-property
-       vec fullname "file-attributes-integer"
-       (list (if (string-equal (substring mode 0 1) "d") t "file")
-	     nlinks owner group '(0 0) mtime '(0 0) size mode nil nil (tramp-get-device vec)))
-      (list file-name mode size mtime))))
-
-(defun tramp-hdfs-send-command (vec command &optional neveropen nooutput)
-  "Send the COMMAND to connection VEC.
-Erases temporary buffer before sending the command.  If optional
-arg NEVEROPEN is non-nil, never try to open the connection.  This
-is meant to be used from `tramp-maybe-open-connection' only.  The
-function waits for output unless NOOUTPUT is set."
-  (unless neveropen (tramp-hdfs-maybe-open-connection vec))
-  (let ((p (tramp-get-connection-process vec)))
-    (when (tramp-get-connection-property p "remote-echo" nil)
-      ;; We mark the command string that it can be erased in the output buffer.
-      (tramp-set-connection-property p "check-remote-echo" t)
-      (setq command (format "%s%s%s" tramp-echo-mark command tramp-echo-mark)))
-    ;; Send the command.
-    (tramp-message vec 6 "%s" command)
-    (with-tramp-progress-reporter
-	vec 3
-	(format "Running command `%s'" command)
-      (tramp-send-string vec command)
-      (unless nooutput (tramp-wait-for-output p)))))
-
-(defun tramp-hdfs-maybe-open-connection (vec)
-  "Maybe open a connection to HOST, log in as USER"
-  (when (let ((tramp-remote-path nil)) ;;tramp-remote-path does not make sense for hdfs
-	  (tramp-maybe-open-connection vec))
-    (tramp-message vec 5 "Setting $PATH environment variable")
-    (tramp-hdfs-send-command
-     vec
-     (format (concat "PATH=" (mapconcat 'identity (cdr tramp-remote-path) ":") "; export PATH")
-	       ;;(mapconcat 'identity (cdr tramp-remote-path) ":")
-	     )
-     t)))
 
 (add-hook 'tramp-unload-hook
 	  (lambda ()
