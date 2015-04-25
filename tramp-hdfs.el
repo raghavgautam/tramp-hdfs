@@ -94,7 +94,7 @@
     (delete-file . tramp-hdfs-handle-delete-file)
     ;; `diff-latest-backup-file' performed by default handler.
     (directory-file-name . tramp-handle-directory-file-name)
-    (directory-files . tramp-hdfs-handle-directory-files)
+    (directory-files . tramp-handle-directory-files)
     (directory-files-and-attributes . tramp-handle-directory-files-and-attributes)
     (dired-call-process . ignore)
     (dired-compress-file . ignore)
@@ -215,30 +215,6 @@ pass to the OPERATION."
 		"recursive=false")))
 	(tramp-hdfs-json-to-lisp (tramp-hdfs-delete-url url) v))
       t)))
-
-(defun tramp-hdfs-handle-directory-files
-  (directory &optional full match nosort)
-  "Like `directory-files' for Tramp files."
-  (let ((result (mapcar 'directory-file-name
-			(file-name-all-completions "" directory)))
-	res)
-    ;; Discriminate with regexp.
-    (when match
-      (setq result
-	    (delete nil
-		    (mapcar (lambda (x) (when (string-match match x) x))
-			    result))))
-    ;; Append directory.
-    (when full
-      (setq result
-	    (mapcar
-	     (lambda (x) (format "%s/%s" directory x))
-	     result)))
-    ;; Sort them if necessary.
-    (unless nosort (setq result (sort result 'string-lessp)))
-    ;; Remove double entries.
-    (dolist (elt result res)
-      (add-to-list 'res elt 'append))))
 
 (defun tramp-hdfs-handle-expand-file-name (name &optional dir)
   "Like `expand-file-name' for Tramp files.
