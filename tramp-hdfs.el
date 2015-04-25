@@ -4,7 +4,7 @@
 ;;
 ;; Version 0.3.0
 ;; Author: Raghav Kumar Gautam <raghav@apache.org>
-;; Keywords: tramp, emacs, hdfs, hadoop
+;; Keywords: tramp, emacs, hdfs, hadoop, webhdfs, rest
 ;; Acknowledgements: Thanks to tramp-smb.el, tramp-sh.el for inspiration & code.
 ;;
 ;; Contains code from GNU Emacs <https://www.gnu.org/software/emacs/>,
@@ -14,8 +14,7 @@
 ;;
 ;;; Commentary:
 ;; Access hadoop/hdfs over Tramp.
-;; This program uses ssh to login to another machine that has hdfs client to access hdfs.
-;; It then fires hdfs commands to do ls or fetch files.
+;; This program uses rest api/webhdfs to access hadoop server.
 ;;
 ;; Configuration:
 ;;   Add the following lines to your .emacs:
@@ -24,9 +23,9 @@
 ;;   (require 'tramp-hdfs);;; Code:
 ;;
 ;; Usage:
-;;   open /hdfs:root@node-1:tmp/ in emacs
-;;   where root   is the user that you want to use for ssh
-;;         node-1 is the name of the machine that has hdfs client
+;;   open /hdfs:root@node-1:/tmp/ in emacs
+;;   where root   is the user that you want to use
+;;         node-1 is the name of the hadoop server
 ;;
 ;;; Code:
 
@@ -40,14 +39,13 @@
 (eval-when-compile
   (require 'cl))
 
-
 (defconst tramp-hdfs-method "hdfs"  "Method to connect HDFS2 servers.")
 (defconst hdfs-status-op "GETFILESTATUS"  "Rest operation for getting status of one file.")
 (defconst hdfs-open-op "OPEN"  "Rest operation for getting content of a file.")
 (defconst hdfs-list-op "LISTSTATUS"  "Rest operation for listing a dir.")
 (defconst hdfs-delete-op "DELETE"  "Rest operation for deleting a file/dir.")
 
-(defcustom hdfs-default-dir "/"  "hdfs default directory"  :group 'tramp  :type 'string  :version "24.3")
+(defcustom hdfs-default-dir "/"  "hdfs default directory"  :group 'tramp-hdfs  :type 'string)
 (defcustom hdfs-bigfile-threshold (* 1024 1024)  "hdfs list command to list one file/dir"  :group 'tramp-hdfs  :type 'integer)
 (defcustom webhdfs-port 50070 "Port number of WebHDFS server." :group 'tramp-hdfs :type 'integer)
 (defcustom webhdfs-endpoint "/webhdfs/v1" "Port number of WebHDFS server." :group 'tramp-hdfs :type 'string)
@@ -68,20 +66,6 @@
 ;;;###autoload
 (eval-after-load 'tramp
   '(tramp-set-completion-function "hdfs" tramp-completion-function-alist-ssh))
-
-(defconst tramp-hdfs-errors
-  (mapconcat
-   'identity
-   `("Connection\\( to \\S-+\\)? failed"
-     "Read from server failed, maybe it closed the connection"
-     "Call timed out: server did not respond"
-     "\\S-+: command not found"
-     ".*No such file or directory.*"
-     ".*Permission denied:.*"
-     ".*Can not create a Path from an empty string.*"
-     "Failed to.*")
-   "\\|")
-  "Regexp for possible error strings of hdfs servers.")
 
 ;; New handlers should be added here.
 (defconst tramp-hdfs-file-name-handler-alist
@@ -184,38 +168,31 @@ pass to the OPERATION."
 	     (cons 'tramp-hdfs-file-name-p 'tramp-hdfs-file-name-handler))
 
 
-(defun tramp-hdfs-handle-delete-directory (directory &optional recursive)
-  "Like `delete-directory' for Tramp files."
-  (setq directory (directory-file-name (expand-file-name directory)))
-  (with-parsed-tramp-file-name directory nil
-    ;; We must also flush the cache of the directory, because
-    ;; `file-attributes' reads the values from there.
-    (tramp-flush-file-property v (file-name-directory localname))
-    (tramp-flush-directory-property v localname)
-    (let ((url (tramp-hdfs-create-url
-		(tramp-hdfs-get-filename v)
-		hdfs-delete-op
-		v
-		(if recursive "recursive=true" "recursive=false"))))
-      (tramp-hdfs-json-to-lisp (tramp-hdfs-delete-url url) v)
-      t)))
+;;hadoop rest api https://hadoop.apache.org/docs/r1.0.4/webhdfs.html
+(defun tramp-hdfs-get-url-content (url)
+  (with-current-buffer (url-retrieve-synchronously url)
+    (delete-region (point-min) url-http-end-of-headers)
+    (buffer-substring (1+ (point-min)) (point-max))))
 
-(defun tramp-hdfs-handle-delete-file (filename &optional _trash)
-  "Like `delete-file' for Tramp files."
-  (setq filename (expand-file-name filename))
-  (when (file-exists-p filename)
-    (with-parsed-tramp-file-name filename nil
-      ;; We must also flush the cache of the directory, because
-      ;; `file-attributes' reads the values from there.
-      (tramp-flush-file-property v (file-name-directory localname))
-      (tramp-flush-file-property v localname)
-      (let ((url (tramp-hdfs-create-url
-		(tramp-hdfs-get-filename v)
-		hdfs-delete-op
-		v
-		"recursive=false")))
-	(tramp-hdfs-json-to-lisp (tramp-hdfs-delete-url url) v))
-      t)))
+(defun tramp-hdfs-delete-url (url)
+  (let* ((url-request-method "DELETE"))
+    (with-current-buffer (url-retrieve-synchronously url)
+      (delete-region (point-min) url-http-end-of-headers)
+      (buffer-substring (1+ (point-min)) (point-max)))))
+
+(defun tramp-hdfs-put-url-get-redirect (url)
+  (let* ((url-request-method "PUT")
+	 ;;(url-request-extra-headers '(("Content-Type" . "application/octet-stream")))
+	 ;;(url-honor-refresh-requests t)
+	 (url-debug t)
+	 (url-request-data "xxx")
+	 (buff (url-retrieve-synchronously url))
+	)
+    (when buff
+      (with-current-buffer buff
+	(buffer-string)))))
+
+;;(tramp-hdfs-put-url-get-redirect "http://node-1:50070/webhdfs/v1/tmp/test2.txt?user.name=rgautam&op=CREATE")
 
 (defun tramp-hdfs-handle-expand-file-name (name &optional dir)
   "Like `expand-file-name' for Tramp files.
@@ -283,34 +260,6 @@ the result will be a local, non-Tramp, file name."
 				  (if (= 2 (logand 2 one-digit)) "w" "-")
 				  (if (= 1 (logand 1 one-digit)) "x" "-"))))))))))
 
-
-;;hadoop rest api https://hadoop.apache.org/docs/r1.0.4/webhdfs.html
-(defun tramp-hdfs-get-url-content (url)
-  (with-current-buffer (url-retrieve-synchronously url)
-    (delete-region (point-min) url-http-end-of-headers)
-    (buffer-substring (1+ (point-min)) (point-max))))
-
-(defun tramp-hdfs-delete-url (url)
-  (let* ((url-request-method "DELETE"))
-    (with-current-buffer (url-retrieve-synchronously url)
-      (delete-region (point-min) url-http-end-of-headers)
-      (buffer-substring (1+ (point-min)) (point-max)))))
-
-(defun tramp-hdfs-put-url-get-redirect (url)
-  (let* ((url-request-method "PUT")
-	 ;;(url-request-extra-headers '(("Content-Type" . "application/octet-stream")))
-	 ;;(url-honor-refresh-requests t)
-	 (url-debug t)
-	 (url-request-data "xxx")
-	 (buff (url-retrieve-synchronously url))
-	)
-    (when buff
-      (with-current-buffer buff
-	(buffer-string)))))
-
-;;(tramp-hdfs-put-url-get-redirect "http://node-1:50070/webhdfs/v1/tmp/test2.txt?user.name=rgautam&op=CREATE")
-
-
 (defun tramp-hdfs-create-url (path op v &optional suffix)
   (unless (string-match-p "^/" path)
     (setq path (concat "/" path)))
@@ -358,7 +307,9 @@ the result will be a local, non-Tramp, file name."
 (defun tramp-hdfs-get-size-params (size)
   "Get url parameters needed for this file size."
   (when (> size hdfs-bigfile-threshold)
-    (let ((start-offset (read-number (format "The requested file is %s bytes (=%s) long. Recommending fetching part of the file. Please enter start offset(starting at zero): " size (file-size-human-readable size))))
+    (let ((start-offset (read-number (format "The requested file is %s bytes (=%s) long. Recommending fetching part of the file. Please enter start offset(starting at zero): "
+					     size
+					     (file-size-human-readable size))))
 	  (length (read-number "Length of the part that you wish to fetch:")))
       (format "offset=%s&length=%s" start-offset length))))
 
@@ -451,6 +402,37 @@ the result will be a local, non-Tramp, file name."
 	(insert
 	 (let* ((file-list (tramp-hdfs-list-directory v)))
 	   (mapconcat (lambda (one-status) (tramp-hdfs-create-one-line one-status v)) file-list "")))))))
+
+(defun tramp-hdfs-handle-delete-directory (directory &optional recursive)
+  "Like `delete-directory' for Tramp files."
+  (setq directory (directory-file-name (expand-file-name directory)))
+  (with-parsed-tramp-file-name directory nil
+    ;; We must also flush the cache of the directory, because
+    ;; `file-attributes' reads the values from there.
+    (tramp-flush-file-property v (file-name-directory localname))
+    (tramp-flush-directory-property v localname)
+    (let ((url (tramp-hdfs-create-url
+		(tramp-hdfs-get-filename v)
+		hdfs-delete-op
+		v
+		(if recursive "recursive=true" "recursive=false"))))
+      (tramp-hdfs-json-to-lisp (tramp-hdfs-delete-url url) v))))
+
+(defun tramp-hdfs-handle-delete-file (filename &optional _trash)
+  "Like `delete-file' for Tramp files."
+  (setq filename (expand-file-name filename))
+  (when (file-exists-p filename)
+    (with-parsed-tramp-file-name filename nil
+      ;; We must also flush the cache of the directory, because
+      ;; `file-attributes' reads the values from there.
+      (tramp-flush-file-property v (file-name-directory localname))
+      (tramp-flush-file-property v localname)
+      (let ((url (tramp-hdfs-create-url
+		(tramp-hdfs-get-filename v)
+		hdfs-delete-op
+		v
+		"recursive=false")))
+	(tramp-hdfs-json-to-lisp (tramp-hdfs-delete-url url) v)))))
 
 ;; Internal file name functions.
 (defun tramp-hdfs-get-filename (vec)
