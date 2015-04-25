@@ -269,7 +269,7 @@ the result will be a local, non-Tramp, file name."
 	      ;;/tmp?user.name=root&op=OPEN
 	      (format "%s?user.name=%s&op=%s"  path (tramp-file-name-user v) op)
 	      (when suffix "&") suffix)))
-    (tramp-debug-message v "Constructed url: %s" url)
+    ;;(tramp-debug-message v "Constructed url: %s" url)
     url))
 
 (defun tramp-hdfs-json-to-lisp (string vec)
