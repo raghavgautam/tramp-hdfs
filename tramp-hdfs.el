@@ -86,7 +86,10 @@
 ;; New handlers should be added here.
 (defconst tramp-hdfs-file-name-handler-alist
   '(;; `access-file' performed by default handler.
+    (add-name-to-file . ignore)
     ;; `byte-compiler-base-file-name' performed by default handler.
+    (copy-directory . ignore)
+    (copy-file . tramp-sh-handle-copy-file)
     (delete-directory . tramp-hdfs-handle-delete-directory)
     (delete-file . tramp-hdfs-handle-delete-file)
     ;; `diff-latest-backup-file' performed by default handler.
@@ -159,15 +162,21 @@ Operations not mentioned here will be handled by the default Emacs primitives.")
   "Invoke the hdfs related OPERATION.
 First arg specifies the OPERATION, second arg is a list of arguments to
 pass to the OPERATION."
-  (when (and (car args)
-	     (string-prefix-p "/hdfs:" (car args))
-	     ;;remove frequent operations
-	     )
-    (tramp-debug-message (tramp-dissect-file-name (car args)) "-> %s"(pp-to-string (cons operation args))))
-  (let ((fn (assoc operation tramp-hdfs-file-name-handler-alist)))
-    (if fn
-	(save-match-data (apply (cdr fn) args))
-      (tramp-run-real-handler operation args))))
+  (when (and tramp-locked (not tramp-locker))
+    (setq tramp-locked nil)
+    (tramp-error
+     (car-safe tramp-current-connection) 'file-error
+     "Forbidden reentrant call of Tramp"))
+  (let ((tl tramp-locked))
+    (setq tramp-locked t)
+    (unwind-protect
+	(let ((tramp-locker t))
+	  (save-match-data
+	    (let ((fn (assoc operation tramp-hdfs-file-name-handler-alist)))
+	      (if fn
+		  (apply (cdr fn) args)
+		(tramp-run-real-handler operation args)))))
+      (setq tramp-locked tl))))
 
 ;;;###tramp-autoload
 (add-to-list 'tramp-foreign-file-name-handler-alist
