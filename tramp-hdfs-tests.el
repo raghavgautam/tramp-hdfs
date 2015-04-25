@@ -83,14 +83,11 @@
 
 ;;list-directory
 (ert-deftest hdfs-test-list-directory ()
-  (should (with-parsed-tramp-file-name "/hdfs:root@node-1:/tmp/id.out/" nil
-	    (tramp-hdfs-list-directory v)))
-  (should (with-parsed-tramp-file-name "/hdfs:root@node-1:/tmp/id.out" nil
-	    (tramp-hdfs-list-directory v)))
-  (should (with-parsed-tramp-file-name "/hdfs:root@node-1:/tmp/id.out/_SUCCESS" nil
-	    (tramp-hdfs-list-directory v)))
-  (should-error (with-parsed-tramp-file-name "/hdfs:root@node-1:/non" nil
-		  (tramp-hdfs-list-directory v))
+  (should (tramp-hdfs-list-directory (tramp-dissect-file-name "/hdfs:root@node-1:/tmp/id.out/")))
+  (should (tramp-hdfs-list-directory (tramp-dissect-file-name "/hdfs:root@node-1:/tmp/id.out/")))
+  (should (tramp-hdfs-list-directory (tramp-dissect-file-name "/hdfs:root@node-1:/tmp/id.out")))
+  (should (tramp-hdfs-list-directory (tramp-dissect-file-name "/hdfs:root@node-1:/tmp/id.out/_SUCCESS")))
+  (should-error (tramp-hdfs-list-directory  (tramp-dissect-file-name "/hdfs:root@node-1:/non"))
 		:type 'file-error))
 
 ;;(insert-directory "/hdfs:node-1:/" "--dired -al" nil t)
