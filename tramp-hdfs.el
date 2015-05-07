@@ -39,11 +39,20 @@
 (eval-when-compile
   (require 'cl))
 
-(defconst tramp-hdfs-method "hdfs"  "Method to connect HDFS2 servers.")
-(defconst hdfs-status-op "GETFILESTATUS"  "Rest operation for getting status of one file.")
-(defconst hdfs-open-op "OPEN"  "Rest operation for getting content of a file.")
-(defconst hdfs-list-op "LISTSTATUS"  "Rest operation for listing a dir.")
-(defconst hdfs-delete-op "DELETE"  "Rest operation for deleting a file/dir.")
+(defconst tramp-hdfs-method "hdfs"
+  "Method to connect HDFS2 servers.")
+
+(defconst hdfs-status-op "GETFILESTATUS"
+  "Rest operation for getting status of one file.")
+
+(defconst hdfs-open-op "OPEN"
+  "Rest operation for getting content of a file.")
+
+(defconst hdfs-list-op "LISTSTATUS"
+  "Rest operation for listing a dir.")
+
+(defconst hdfs-delete-op "DELETE"
+  "Rest operation for deleting a file/dir.")
 
 (defcustom hdfs-default-dir "/"
   "HDFS default directory."
