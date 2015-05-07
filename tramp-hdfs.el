@@ -65,7 +65,6 @@
   :group 'tramp-hdfs
   :type 'string)
 
-
 (add-to-list 'tramp-default-user-alist
 	     `(,(concat
 		 "\\`"
@@ -257,16 +256,9 @@ Optional argument ID-FORMAT ignored."
     (with-parsed-tramp-file-name (expand-file-name filename) nil
       (with-tramp-file-property
 	  v localname (format "file-attributes-%s" id-format)
-	(ignore-errors (tramp-hdfs-do-file-attributes-with-stat v id-format))))))
-
-(defun tramp-hdfs-do-file-attributes-with-stat (vec &optional id-format)
-  "Implement `file-attributes' for Tramp files using stat command."
-  (tramp-message
-   vec 5 "file attributes with stat: %s" (tramp-file-name-localname vec))
-  (let* ((localname (tramp-hdfs-get-filename vec))
-	 (url (tramp-hdfs-create-url localname hdfs-status-op vec))
-	 (file-status (cdar (tramp-hdfs-json-to-lisp (tramp-hdfs-get-url-content url) vec))))
-    (tramp-hdfs-decode-file-status file-status vec)))
+	(let* ((url (tramp-hdfs-create-url localname hdfs-status-op v))
+	       (file-status (cdar (tramp-hdfs-json-to-lisp (tramp-hdfs-get-url-content url) v))))
+	  (tramp-hdfs-decode-file-status file-status v))))))
 
 (defun file-modes-number-to-string (mode-num)
   "Convert permission like 766 to rwx-wx-wx.
