@@ -1,6 +1,6 @@
 ;;; tramp-hdfs.el --- Tramp extension to access hadoop/hdfs file system in Emacs
 
-;; Copyright (C) 2008-2014  The Tramp HDFS2 Developers
+;; Copyright (C) 2015  The Tramp HDFS Developers
 ;;
 ;; Version 0.3.0
 ;; Author: Raghav Kumar Gautam <raghav@apache.org>
@@ -23,7 +23,7 @@
 ;;   (require 'tramp-hdfs);;; Code:
 ;;
 ;; Usage:
-;;   open /hdfs:root@node-1:/tmp/ in emacs
+;;   open /hdfs:root@node-1:/tmp/ in Emacs
 ;;   where root   is the user that you want to use
 ;;         node-1 is the name of the hadoop server
 ;;
@@ -45,10 +45,25 @@
 (defconst hdfs-list-op "LISTSTATUS"  "Rest operation for listing a dir.")
 (defconst hdfs-delete-op "DELETE"  "Rest operation for deleting a file/dir.")
 
-(defcustom hdfs-default-dir "/"  "hdfs default directory"  :group 'tramp-hdfs  :type 'string)
-(defcustom hdfs-bigfile-threshold (* 1024 1024)  "hdfs list command to list one file/dir"  :group 'tramp-hdfs  :type 'integer)
-(defcustom webhdfs-port 50070 "Port number of WebHDFS server." :group 'tramp-hdfs :type 'integer)
-(defcustom webhdfs-endpoint "/webhdfs/v1" "Port number of WebHDFS server." :group 'tramp-hdfs :type 'string)
+(defcustom hdfs-default-dir "/"
+  "HDFS default directory."
+  :group 'tramp-hdfs
+  :type 'string)
+
+(defcustom hdfs-bigfile-threshold (* 1024 1024)
+  "HDFS list command to list one file/dir."
+  :group 'tramp-hdfs
+  :type 'integer)
+
+(defcustom webhdfs-port 50070
+  "Port number of WebHDFS server."
+  :group 'tramp-hdfs
+  :type 'integer)
+
+(defcustom webhdfs-endpoint "/webhdfs/v1"
+  "Port number of WebHDFS server."
+  :group 'tramp-hdfs
+  :type 'string)
 
 
 (add-to-list 'tramp-default-user-alist
@@ -82,7 +97,7 @@
     (directory-files-and-attributes . tramp-handle-directory-files-and-attributes)
     (dired-call-process . ignore)
     (dired-compress-file . ignore)
-    ;;(dired-recursive-delete-directory . 
+    ;;(dired-recursive-delete-directory .
     (dired-uncache . tramp-handle-dired-uncache)
     (expand-file-name . tramp-hdfs-handle-expand-file-name)
     (file-accessible-directory-p . tramp-hdfs-handle-file-directory-p)
@@ -138,7 +153,7 @@ Operations not mentioned here will be handled by the default Emacs primitives.")
 ;; tramp-loaddefs.el.  Otherwise, there would be recursive autoloading.
 ;;;###tramp-autoload
 (defsubst tramp-hdfs-file-name-p (filename)
-  "Check if it's a filename for hdfs servers."
+  "Check if it's a FILENAME for hdfs servers."
   (string= (tramp-file-name-method (tramp-dissect-file-name filename))
 	   tramp-hdfs-method))
 
@@ -146,7 +161,8 @@ Operations not mentioned here will be handled by the default Emacs primitives.")
 (defun tramp-hdfs-file-name-handler (operation &rest args)
   "Invoke the hdfs related OPERATION.
 First arg specifies the OPERATION, second arg is a list of arguments to
-pass to the OPERATION."
+pass to the OPERATION.
+Optional argument ARGS is a list of arguments to pass to the OPERATION."
   (when (and tramp-locked (not tramp-locker))
     (setq tramp-locked nil)
     (tramp-error
@@ -170,24 +186,25 @@ pass to the OPERATION."
 
 ;;hadoop rest api https://hadoop.apache.org/docs/r1.0.4/webhdfs.html
 (defun tramp-hdfs-get-url-content (url)
-  (with-current-buffer (url-retrieve-synchronously url)
-    (delete-region (point-min) url-http-end-of-headers)
-    (buffer-substring (1+ (point-min)) (point-max))))
+  "Run a get request for the URL and get the content."
+  (let ((url-http-attempt-keepalives nil))
+    (with-current-buffer (url-retrieve-synchronously url)
+      (delete-region (point-min) url-http-end-of-headers)
+      (buffer-substring (1+ (point-min)) (point-max)))))
 
 (defun tramp-hdfs-delete-url (url)
-  (let* ((url-request-method "DELETE"))
+  "Run a http delete request at the URL and get the content returned."
+  (let ((url-request-method "DELETE")
+	(url-http-attempt-keepalives nil))
     (with-current-buffer (url-retrieve-synchronously url)
       (delete-region (point-min) url-http-end-of-headers)
       (buffer-substring (1+ (point-min)) (point-max)))))
 
 (defun tramp-hdfs-put-url-get-redirect (url)
+  "Run a put request at th URL and get the redirected url."
   (let* ((url-request-method "PUT")
-	 ;;(url-request-extra-headers '(("Content-Type" . "application/octet-stream")))
-	 ;;(url-honor-refresh-requests t)
-	 (url-debug t)
-	 (url-request-data "xxx")
-	 (buff (url-retrieve-synchronously url))
-	)
+	 (url-http-attempt-keepalives nil)
+	 (buff (url-retrieve-synchronously url)))
     (when buff
       (with-current-buffer buff
 	(buffer-string)))))
@@ -196,8 +213,10 @@ pass to the OPERATION."
 
 (defun tramp-hdfs-handle-expand-file-name (name &optional dir)
   "Like `expand-file-name' for Tramp files.
-If the localname part of the given file name starts with \"/../\" then
-the result will be a local, non-Tramp, file name."
+If the localname part of the given file starts with \"/../\" then
+the result will be a local, non-Tramp, filename.
+Argument NAME The name that needs to be expanded.
+Optional argument DIR The directory to use for expansion. If nil use present working directory."
   ;; If DIR is not given, use `default-directory' or "/".
   (setq dir (or dir default-directory "/"))
   ;; Unless NAME is absolute, concat DIR and NAME.
@@ -230,7 +249,9 @@ the result will be a local, non-Tramp, file name."
 	 hop)))))
 
 (defun tramp-hdfs-handle-file-attributes (filename &optional id-format)
-  "Like `file-attributes' for Tramp files."
+  "Like `file-attributes' for Tramp files.
+Argument FILENAME the file.
+Optional argument ID-FORMAT ignored."
   (unless id-format (setq id-format 'integer))
   (ignore-errors
     (with-parsed-tramp-file-name (expand-file-name filename) nil
@@ -248,7 +269,8 @@ the result will be a local, non-Tramp, file name."
     (tramp-hdfs-decode-file-status file-status vec)))
 
 (defun file-modes-number-to-string (mode-num)
-  "Convert permission like 766 to rwx-wx-wx"
+  "Convert permission like 766 to rwx-wx-wx.
+Argument MODE-NUM is the file mode as numbers."
   (when (string-match "[0-7]?\\([0-7]\\{3\\}\\)" mode-num)
     (let ((perm (match-string 1 mode-num)))
       (let ((res ""))
@@ -261,6 +283,11 @@ the result will be a local, non-Tramp, file name."
 				  (if (= 1 (logand 1 one-digit)) "x" "-"))))))))))
 
 (defun tramp-hdfs-create-url (path op v &optional suffix)
+  "Create url.
+Argument PATH the file/dir path.
+Argument OP operation to be performed on the path.
+Argument V vector.
+Optional argument SUFFIX extra arguments to be appended to url."
   (unless (string-match-p "^/" path)
     (setq path (concat "/" path)))
   (let ((url (concat
