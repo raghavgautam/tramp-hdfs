@@ -1,5 +1,23 @@
+;;; tramp-hdfs-tests.el --- Tests for tramp-hdfs.
+
+;; Copyright (C) 2008-2014  The Tramp HDFS Developers
+;;
+;; Version 0.3.0
+;; Author: Raghav Kumar Gautam <raghav@apache.org>
+;; Keywords: tramp, emacs, hdfs, hadoop, webhdfs, rest
+;; Acknowledgements: Thanks to tramp-smb.el, tramp-sh.el for inspiration & code.
+;;
+;; Contains code from GNU Emacs <https://www.gnu.org/software/emacs/>,
+;; released under the GNU General Public License version 3 or later.
+;; You should have received a copy of the GNU General Public License
+;; along with tramp-hdfs.  If not, see <http://www.gnu.org/licenses/>.
+
+;;; Commentary:
+;; These are some tests for tramp-hdfs.
+;;
+;;; Code:
 (require 'tramp-hdfs)
-;;expand-file-name
+
 (ert-deftest hdfs-test-expand-file-name1 ()
   "Tests the expand-file-name for hdfs."
   (should (equal (expand-file-name "/hdfs:node-1:"             "/tmp") "/hdfs:rgautam@node-1:/"))
@@ -107,3 +125,7 @@
 
 (ert "hdfs-test*")
 (provide 'tramp-hdfs-tests)
+
+(provide 'tramp-hdfs-tests)
+
+;;; tramp-hdfs-tests.el ends here
