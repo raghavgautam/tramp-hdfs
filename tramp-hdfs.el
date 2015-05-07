@@ -191,7 +191,6 @@ Optional argument ARGS is a list of arguments to pass to the OPERATION."
 (add-to-list 'tramp-foreign-file-name-handler-alist
 	     (cons 'tramp-hdfs-file-name-p 'tramp-hdfs-file-name-handler))
 
-
 ;;hadoop rest api https://hadoop.apache.org/docs/r1.0.4/webhdfs.html
 (defun tramp-hdfs-get-url-content (url)
   "Run a get request for the URL and get the content."
@@ -301,6 +300,9 @@ Optional argument SUFFIX extra arguments to be appended to url."
     url))
 
 (defun tramp-hdfs-json-to-lisp (string vec)
+  "Convert supplied JSON to Lisp notation.
+Argument STRING the json string.
+Argument VEC specifies the connection."
   (let* ((lisp-data (json-read-from-string string))
 	 (exception (assoc 'RemoteException lisp-data)))
     (if exception
@@ -309,7 +311,9 @@ Optional argument SUFFIX extra arguments to be appended to url."
       lisp-data)))
 
 (defun tramp-hdfs-decode-file-status (file-status vec)
-  "Decode assoc list to appropriate status."
+  "Decode association list to normal list.
+Argument FILE-STATUS is the file status as association list.
+Argument VEC specifies the connection."
   (let* ((dir? (string= (cdr (assoc 'type file-status)) "DIRECTORY"))
 	 (replication (cdr (assoc 'replication file-status)))
 	 (uid         (cdr (assoc 'owner       file-status)))
@@ -328,12 +332,13 @@ Optional argument SUFFIX extra arguments to be appended to url."
     (list dir? replication uid gid access-time modification-time status-change-time size mode ignore inode device)))
 
 (defun tramp-hdfs-handle-file-directory-p (filename)
-  "Like `file-directory-p' for Tramp files."
+  "Like `file-directory-p' for Tramp files.
+FILENAME the filename to check."
   (and (file-exists-p filename)
        (eq ?d (aref (nth 8 (file-attributes filename)) 0))))
 
 (defun tramp-hdfs-get-size-params (size)
-  "Get url parameters needed for this file size."
+  "Get url parameters needed for this file SIZE."
   (when (> size hdfs-bigfile-threshold)
     (let ((start-offset (read-number (format "The requested file is %s bytes (=%s) long. Recommending fetching part of the file. Please enter start offset(starting at zero): "
 					     size
@@ -342,13 +347,13 @@ Optional argument SUFFIX extra arguments to be appended to url."
       (format "offset=%s&length=%s" start-offset length))))
 
 (defun tramp-hdfs-handle-file-local-copy (filename)
-  "Like `file-local-copy' for Tramp files."
+  "Like `file-local-copy' for Tramp files.
+FILENAME the filename to be copied locally."
   (with-parsed-tramp-file-name filename nil
     (unless (file-exists-p filename)
       (tramp-error
        v 'file-error
        "Cannot make local copy of non-existing file `%s'" filename))
-
     (let* ((size (nth 7 (file-attributes (file-truename filename))))
 	   (localname (tramp-hdfs-get-filename v))
 	   (url-size-params (tramp-hdfs-get-size-params size))
@@ -364,10 +369,12 @@ Optional argument SUFFIX extra arguments to be appended to url."
       (run-hooks 'tramp-handle-file-local-copy-hook)
       tmpfile)))
 
-(defun tramp-hdfs-handle-file-name-all-completions (filename directory)
-  "Like `file-name-all-completions' for Tramp files."
+(defun tramp-hdfs-handle-file-name-all-completions (file directory)
+  "Like `file-name-all-completions' for Tramp files.
+Return a list of all completions of file name FILE in directory DIRECTORY.
+These are all file names in directory DIRECTORY which begin with FILE."
   (all-completions
-   filename
+   file
    (with-parsed-tramp-file-name directory nil
      (with-tramp-file-property v localname "file-name-all-completions"
        (let ((file-list (tramp-hdfs-list-directory v)))
