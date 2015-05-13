@@ -196,25 +196,47 @@ Optional argument ARGS is a list of arguments to pass to the OPERATION."
   "Run a get request for the URL and get the content."
   (let ((url-http-attempt-keepalives nil))
     (with-current-buffer (url-retrieve-synchronously url)
-      (delete-region (point-min) url-http-end-of-headers)
-      (buffer-substring (1+ (point-min)) (point-max)))))
+      (tramp-hdfs-delete-http-header* (current-buffer))
+      (buffer-string))))
 
 (defun tramp-hdfs-delete-url (url)
   "Run a http delete request at the URL and get the content returned."
   (let ((url-request-method "DELETE")
 	(url-http-attempt-keepalives nil))
     (with-current-buffer (url-retrieve-synchronously url)
-      (delete-region (point-min) url-http-end-of-headers)
-      (buffer-substring (1+ (point-min)) (point-max)))))
+      (tramp-hdfs-delete-http-header* (current-buffer))
+      (buffer-string))))
+
+(defconst http-header-regexp "^\\([^ :]+\\): \\(.*\\)$")
+
+(defun tramp-hdfs-delete-http-header* (buffer)
+  "Given a BUFFER with HTTP response, delete the headers.  Return parsed status and headers as list."
+  (when (buffer-live-p buffer)
+      (with-current-buffer buffer
+	(goto-char (point-min))
+	(let ((response-headers '())
+	      (response-status (buffer-substring-no-properties (point) (point-at-eol))))
+	  (forward-line)
+	  (while (looking-at http-header-regexp)
+	    (setq response-headers
+		  (cons
+		   (cons
+		    (buffer-substring-no-properties (match-beginning 1) (match-end 1))
+		    (buffer-substring-no-properties (match-beginning 2) (match-end 2)))
+		   response-headers))
+	    (forward-line))
+	  (forward-line)
+	  (delete-region (point-min) (point))
+	  (list response-status response-headers)))))
 
 (defun tramp-hdfs-put-url-get-redirect (url)
   "Run a put request at th URL and get the redirected url."
   (let* ((url-request-method "PUT")
 	 (url-http-attempt-keepalives nil)
-	 (buff (url-retrieve-synchronously url)))
-    (when buff
-      (with-current-buffer buff
-	(buffer-string)))))
+	 (buff (url-retrieve-synchronously url))
+	 (response-headers '()))
+    (with-current-buffer (url-retrieve-synchronously url)
+      (tramp-hdfs-delete-http-header* (current-buffer)))))
 
 ;;(tramp-hdfs-put-url-get-redirect "http://node-1:50070/webhdfs/v1/tmp/test2.txt?user.name=rgautam&op=CREATE")
 
