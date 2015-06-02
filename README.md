@@ -1,4 +1,6 @@
 # Tramp-HDFS
+
+[![Join the chat at https://gitter.im/raghavgautam/tramp-hdfs](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/raghavgautam/tramp-hdfs?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 [![MELPA](http://melpa.org/packages/tramp-hdfs-badge.svg)](http://melpa.org/#/tramp-hdfs)
 
 Browse HDFS(Hadoop Distributed File System) in Emacs using Tramp.
