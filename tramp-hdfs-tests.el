@@ -17,7 +17,7 @@
 ;;
 ;;; Code:
 (require 'tramp-hdfs)
-
+(require 'ert)
 (ert-deftest hdfs-test-expand-file-name1 ()
   "Tests the expand-file-name for hdfs."
   (should (equal (expand-file-name "/hdfs:node-1:"             "/tmp") "/hdfs:rgautam@node-1:/"))
@@ -123,9 +123,7 @@
 	(should (equal (buffer-live-p (find-file "/hdfs:node-1:/tmp/id.out/part-m-00000")) t)))
     (progn (tramp-cleanup-all-connections) (tramp-cleanup-all-buffers))))
 
+;;(let ((tramp-verbose 10)) (find-file "/hdfs:root@node-1:/"))
 (ert "hdfs-test*")
 (provide 'tramp-hdfs-tests)
-
-(provide 'tramp-hdfs-tests)
-
 ;;; tramp-hdfs-tests.el ends here
