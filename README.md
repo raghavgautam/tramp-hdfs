@@ -2,6 +2,7 @@
 [![MELPA](http://melpa.org/packages/tramp-hdfs-badge.svg)](http://melpa.org/#/tramp-hdfs)
 
 Browse HDFS(Hadoop Distributed File System) in Emacs using Tramp.
+![tramp-hdfs-screenshot](tramp-hdfs-screenshot.png)
 
 ## Usage
 Put this somewhere in your init file. Eg. ~/.emacs or ~/.emacs.d/init.el
