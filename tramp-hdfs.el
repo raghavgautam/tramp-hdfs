@@ -192,12 +192,14 @@ Optional argument ARGS is a list of arguments to pass to the OPERATION."
 	     (cons 'tramp-hdfs-file-name-p 'tramp-hdfs-file-name-handler))
 
 ;;hadoop rest api https://hadoop.apache.org/docs/r1.0.4/webhdfs.html
-(defun tramp-hdfs-get-url-content (url)
+(defun tramp-hdfs-get-url-content (url vec)
   "Run a get request for the URL and get the content."
-  (let ((url-http-attempt-keepalives nil))
-    (with-current-buffer (url-retrieve-synchronously url)
-      (tramp-hdfs-delete-http-header* (current-buffer))
-      (buffer-string))))
+  (let ((url-http-attempt-keepalives nil)
+	(content (with-current-buffer (url-retrieve-synchronously url)
+		  (tramp-hdfs-delete-http-header* (current-buffer))
+		  (buffer-string))))
+    (tramp-message v 10 "Fetched %s to get: %s" url content)
+    content))
 
 (defun tramp-hdfs-delete-url (url)
   "Run a http delete request at the URL and get the content returned."
@@ -287,7 +289,7 @@ Optional argument ID-FORMAT ignored."
       (with-tramp-file-property
 	  v localname (format "file-attributes-%s" id-format)
 	(let* ((url (tramp-hdfs-create-url localname hdfs-status-op v))
-	       (file-status (cdar (tramp-hdfs-json-to-lisp (tramp-hdfs-get-url-content url) v))))
+	       (file-status (cdar (tramp-hdfs-json-to-lisp (tramp-hdfs-get-url-content url v) v))))
 	  (tramp-hdfs-decode-file-status file-status v))))))
 
 (defun file-modes-number-to-string (mode-num)
@@ -380,7 +382,7 @@ FILENAME the filename to be copied locally."
 	   (localname (tramp-hdfs-get-filename v))
 	   (url-size-params (tramp-hdfs-get-size-params size))
 	   (url (tramp-hdfs-create-url localname hdfs-open-op v url-size-params))
-	   (content (tramp-hdfs-get-url-content url))
+	   (content (tramp-hdfs-get-url-content url v))
 	   (tmpfile (tramp-compat-make-temp-file filename)))
       (let ((coding-system-for-write 'no-conversion)) (write-region content nil tmpfile))
       ;; Set proper permissions.
@@ -441,7 +443,7 @@ These are all file names in directory DIRECTORY which begin with FILE."
 (defun tramp-hdfs-list-directory (v)
   "List files of a hdfs dir."
   (let* ((url (tramp-hdfs-create-url (tramp-hdfs-get-filename v) hdfs-list-op v))
-	 (retval (tramp-hdfs-json-to-lisp (tramp-hdfs-get-url-content url) v)))
+	 (retval (tramp-hdfs-json-to-lisp (tramp-hdfs-get-url-content url v) v)))
     (cdadar retval)))
 
 (defun tramp-hdfs-handle-insert-directory
