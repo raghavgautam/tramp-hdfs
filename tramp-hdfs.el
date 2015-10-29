@@ -198,7 +198,7 @@ Optional argument ARGS is a list of arguments to pass to the OPERATION."
 	(content (with-current-buffer (url-retrieve-synchronously url)
 		  (tramp-hdfs-delete-http-header* (current-buffer))
 		  (buffer-string))))
-    (tramp-message v 10 "Fetched %s to get: %s" url content)
+    (tramp-message vec 10 "Fetched %s to get: %s" url content)
     content))
 
 (defun tramp-hdfs-delete-url (url)
