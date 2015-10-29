@@ -2,7 +2,7 @@
 
 ;; Copyright (C) 2015  The Tramp HDFS Developers
 ;;
-;; Version 0.3.0
+;; Version: 0.3.0
 ;; Author: Raghav Kumar Gautam <raghav@apache.org>
 ;; Keywords: tramp, emacs, hdfs, hadoop, webhdfs, rest
 ;; Acknowledgements: Thanks to tramp-smb.el, tramp-sh.el for inspiration & code.
