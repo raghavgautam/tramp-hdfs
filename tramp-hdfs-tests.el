@@ -57,15 +57,15 @@
 
 ;;directory-files
 (ert-deftest hdfs-test-directory-files ()
-  (should (equal (directory-files "/hdfs:root@node-1:/") '("app-logs" "apps" "argus" "hdp" "mapred" "system" "tmp" "user")))
-  (should (equal (directory-files "/hdfs:root@node-1:") '("app-logs" "apps" "argus" "hdp" "mapred" "system" "tmp" "user"))))
+  (should (equal (directory-files "/hdfs:root@node-1:/")  '("app-logs" "apps" "hdp" "mapred" "mr-history" "tmp" "user")))
+  (should (equal (directory-files "/hdfs:root@node-1:")   '("app-logs" "apps" "hdp" "mapred" "mr-history" "tmp" "user"))))
 
 
 ;;file-name-all-completions
 ;;This function should return "foo/" for directories and "bar" for files.
 (ert-deftest hdfs-test-file-name-completions ()
-  (should (equal (file-name-all-completions "" "/hdfs:root@node-1:/") '("app-logs/" "apps/" "argus/" "hdp/" "mapred/" "system/" "tmp/" "user/")))
-  (should (equal (file-name-all-completions "" "/hdfs:root@node-1:/tmp/id.out/") '("_SUCCESS" "part-m-00000"))))
+  (should (equal (file-name-all-completions "" "/hdfs:root@node-1:/") '("app-logs/" "apps/" "hdp/" "mapred/" "mr-history/" "tmp/" "user/")))
+  (should (equal (file-name-all-completions "" "/hdfs:root@node-1:/tmp/id.out") '("_SUCCESS" "part-m-00000"))))
 
 (ert-deftest hdfs-test-file-name-completions2 ()
   (should (equal (file-name-all-completions "app" "/hdfs:root@node-1:/") '("app-logs/" "apps/")))
