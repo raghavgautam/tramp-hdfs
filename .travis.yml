@@ -22,4 +22,4 @@ install:
     fi
   
 script:
-  echo "Method = $METHOD EMACS=$EMACS" && emacs --version && emacs -batch -f batch-byte-compile *.el
+  echo "Method = $METHOD EMACS=$EMACS" && emacs --version && emacs -batch -f batch-byte-compile tramp-hdfs.el
