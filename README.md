@@ -1,5 +1,6 @@
 # Tramp-HDFS
 
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/b0d68098335044c6a7976ad40db03ff6)](https://www.codacy.com/app/raghavgautam/tramp-hdfs?utm_source=github.com&utm_medium=referral&utm_content=raghavgautam/tramp-hdfs&utm_campaign=badger)
 [![Join the chat at https://gitter.im/raghavgautam/tramp-hdfs](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/raghavgautam/tramp-hdfs?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 [![MELPA](http://melpa.org/packages/tramp-hdfs-badge.svg)](http://melpa.org/#/tramp-hdfs)
 
