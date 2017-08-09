@@ -5,6 +5,7 @@
 ;; Version: 0.3.0
 ;; Author: Raghav Kumar Gautam <raghav@apache.org>
 ;; Keywords: tramp, emacs, hdfs, hadoop, webhdfs, rest
+;; Package-Requires: ((emacs "24.4"))
 ;; Acknowledgements: Thanks to tramp-smb.el, tramp-sh.el for inspiration & code.
 ;;
 ;; Contains code from GNU Emacs <https://www.gnu.org/software/emacs/>,
