@@ -20,7 +20,7 @@
 (require 'ert)
 (ert-deftest hdfs-test-expand-file-name1 ()
   "Tests the expand-file-name for hdfs."
-  (should (equal (expand-file-name "/hdfs:node-1:"             "/tmp") "/hdfs:rgautam@node-1:/"))
+  (should (equal (expand-file-name "/hdfs:node-1:"             "/tmp") "/hdfs:root@node-1:/"))
   (should (equal (expand-file-name "/hdfs:root@node-1:"        "/Users") "/hdfs:root@node-1:/" ))
   (should (equal (expand-file-name "/hdfs:root@node-1:"        nil)      "/hdfs:root@node-1:/" ))
   (should (equal (expand-file-name "/hdfs:root@node-1:/"       "/Users") "/hdfs:root@node-1:/" ))
@@ -57,14 +57,14 @@
 
 ;;directory-files
 (ert-deftest hdfs-test-directory-files ()
-  (should (equal (directory-files "/hdfs:root@node-1:/")  '("app-logs" "apps" "hdp" "mapred" "mr-history" "tmp" "user")))
-  (should (equal (directory-files "/hdfs:root@node-1:")   '("app-logs" "apps" "hdp" "mapred" "mr-history" "tmp" "user"))))
+  (should (equal (directory-files "/hdfs:root@node-1:/")  '("app-logs" "apps" "ats" "hdp" "mapred" "mr-history" "ranger" "tmp" "user")))
+  (should (equal (directory-files "/hdfs:root@node-1:")   '("app-logs" "apps" "ats" "hdp" "mapred" "mr-history" "ranger" "tmp" "user"))))
 
 
 ;;file-name-all-completions
 ;;This function should return "foo/" for directories and "bar" for files.
 (ert-deftest hdfs-test-file-name-completions ()
-  (should (equal (file-name-all-completions "" "/hdfs:root@node-1:/") '("app-logs/" "apps/" "hdp/" "mapred/" "mr-history/" "tmp/" "user/")))
+  (should (equal (file-name-all-completions "" "/hdfs:root@node-1:/") '("app-logs/" "apps/" "ats/" "hdp/" "mapred/" "mr-history/" "ranger/" "tmp/" "user/")))
   (should (equal (file-name-all-completions "" "/hdfs:root@node-1:/tmp/id.out") '("_SUCCESS" "part-m-00000"))))
 
 (ert-deftest hdfs-test-file-name-completions2 ()
@@ -89,6 +89,13 @@
   (should (equal (first (file-attributes "/hdfs:root@node-1:/tmp/id.out/part-m-00000"))nil))
   ;;other values of file attributes take different value for each execution
   ;;hence they need to checked manually
+  )
+
+(ert-deftest hdfs-test-file-readable-p ()
+  (should (file-readable-p "/tmp/"))
+  (should (file-readable-p "/hdfs:root@node-1:/tmp/"))
+  (should (not (file-readable-p "/tmp/non-existing")))
+  (should (not (file-readable-p "/hdfs:root@node-1:/tmp/non-existing")))
   )
 
 ;;TODO implement write support
@@ -123,7 +130,7 @@
 	(should (equal (buffer-live-p (find-file "/hdfs:node-1:/tmp/id.out/part-m-00000")) t)))
     (progn (tramp-cleanup-all-connections) (tramp-cleanup-all-buffers))))
 
-;;(let ((tramp-verbose 10)) (find-file "/hdfs:root@node-1:/"))
-(ert "hdfs-test*")
+;;(let ((tramp-verbose 10)) (find-file "/hdfs:hdfs@node-1:/"))
+;;(ert "hdfs-test*")
 (provide 'tramp-hdfs-tests)
 ;;; tramp-hdfs-tests.el ends here

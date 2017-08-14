@@ -34,6 +34,12 @@ Ensure you have melpa in your package-archives
 (see [Melpa Installation](http://melpa.org/#/getting-started)).
 Then, M-x package-install [RET] tramp-hdfs. 
 
+## Run inside docker
+docker run -it --rm -v `pwd`:/root/.emacs.d silex/emacs
+
+## Run tests
+docker run -it --rm -v `pwd`:/root/.emacs.d silex/emacs --batch -l ert -l /root/.emacs.d/tramp-hdfs.el -l /root/.emacs.d/tramp-hdfs-tests.el -f ert-run-tests-batch-and-exit
+
 ## Known issues:
 * Security is not supported.
 * It doesn't support writing to files to hdfs or acls.
