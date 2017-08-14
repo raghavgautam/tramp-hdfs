@@ -214,10 +214,23 @@ Optional argument ARGS is a list of arguments to pass to the OPERATION."
 (defun tramp-hdfs-delete-url (url)
   "Run a http delete request at the URL and get the content returned."
   (let ((url-request-method "DELETE")
-	(url-http-attempt-keepalives nil))
-    (with-current-buffer (url-retrieve-synchronously url)
-      (tramp-hdfs-delete-http-header* (current-buffer))
-      (buffer-string))))
+	(url-http-attempt-keepalives nil)
+	(content (with-current-buffer (url-retrieve-synchronously url)
+		   (tramp-hdfs-delete-http-header* (current-buffer))
+		   (buffer-string))))
+    (tramp-message vec 10 "Fetched %s to get: %s" url content)
+    content))
+
+(defun tramp-hdfs-put-url-get-redirect (url)
+  "Run a put request at th URL and get the redirected url."
+  (let* ((url-request-method "PUT")
+	 (url-http-attempt-keepalives nil)
+	 (buff (url-retrieve-synchronously url))
+	 (response-headers '())
+	 (content (with-current-buffer (url-retrieve-synchronously url)
+		    (tramp-hdfs-delete-http-header* (current-buffer)))))
+    content))
+;;(tramp-hdfs-put-url-get-redirect "http://node-1:50070/webhdfs/v1/tmp/test2.txt?user.name=rgautam&op=CREATE")
 
 (defconst http-header-regexp "^\\([^ :]+\\): \\(.*\\)$")
 
@@ -240,17 +253,6 @@ Optional argument ARGS is a list of arguments to pass to the OPERATION."
 	  (forward-line)
 	  (delete-region (point-min) (point))
 	  (list response-status response-headers)))))
-
-(defun tramp-hdfs-put-url-get-redirect (url)
-  "Run a put request at th URL and get the redirected url."
-  (let* ((url-request-method "PUT")
-	 (url-http-attempt-keepalives nil)
-	 (buff (url-retrieve-synchronously url))
-	 (response-headers '()))
-    (with-current-buffer (url-retrieve-synchronously url)
-      (tramp-hdfs-delete-http-header* (current-buffer)))))
-
-;;(tramp-hdfs-put-url-get-redirect "http://node-1:50070/webhdfs/v1/tmp/test2.txt?user.name=rgautam&op=CREATE")
 
 (defun tramp-hdfs-handle-expand-file-name (name &optional dir)
   "Like `expand-file-name' for Tramp files.
