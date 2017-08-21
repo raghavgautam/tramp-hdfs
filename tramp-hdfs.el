@@ -70,6 +70,11 @@
   :group 'tramp-hdfs
   :type 'integer)
 
+(defcustom webhdfs-protocol "http"
+  "Port number of WebHDFS server."
+  :group 'tramp-hdfs
+  :type 'string)
+
 (defcustom webhdfs-endpoint "/webhdfs/v1"
   "Port number of WebHDFS server."
   :group 'tramp-hdfs
@@ -172,6 +177,7 @@ Operations not mentioned here will be handled by the default Emacs primitives.")
     (with-tramp-file-property v localname "file-readable-p"
       ;; Examine `file-attributes' cache to see if request can be
       ;; satisfied without remote operation.
+      ;;TODO we need to do actual check using rest calls
       (tramp-check-cached-permissions v ?r))))
 
 
@@ -231,11 +237,11 @@ Optional argument ARGS is a list of arguments to pass to the OPERATION."
   (let ((response
 	 (if tramp-hdfs-curl-path
 	     (progn
-	       (tramp-message vec 10 "Command: %s -sS -X %s %s" tramp-hdfs-curl-path method url)
+	       (tramp-message vec 10 "Command: %s -k -sSL --negotiate -u : -X %s %s" tramp-hdfs-curl-path method url)
 	       (string-trim (with-output-to-string
 			      (with-current-buffer
 				  standard-output
-				(call-process tramp-hdfs-curl-path nil t nil "-sS" "--negotiate" "-u" ":"  "-X" method url)))))
+				(call-process tramp-hdfs-curl-path nil t nil "-k" "-sSL" "--negotiate" "-u" ":"  "-X" method url)))))
 	   (let* ((url-request-method method)
 		  (url-http-attempt-keepalives nil)
 		  (buff (url-retrieve-synchronously url))
@@ -342,7 +348,7 @@ Optional argument SUFFIX extra arguments to be appended to url."
     (setq path (concat "/" path)))
   (let ((url (concat
 	      ;;http://node-1:57000/webhdfs/v1
-	      (format "http://%s:%s%s" (tramp-file-name-real-host v) (number-to-string webhdfs-port) webhdfs-endpoint)
+	      (format "%s://%s:%s%s" webhdfs-protocol (tramp-file-name-real-host v) (or (tramp-file-name-port v) (number-to-string webhdfs-port)) webhdfs-endpoint)
 	      ;;/tmp?user.name=root&op=OPEN
 	      (format "%s?user.name=%s&op=%s"  path (tramp-file-name-user v) op)
 	      (when suffix "&") suffix)))
