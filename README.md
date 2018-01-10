@@ -45,8 +45,8 @@ docker run -it --rm -v `pwd`:/root/.emacs.d silex/emacs --batch -l ert -l /root/
 ```
 
 ## Known issues:
-* Security is not supported.
-* It doesn't support writing to files to hdfs or acls.
+* No support for writing/modification of files.
+* No support for acls.
 
 ## Filing bugs & Feature requests:
 Please open bugs at:
