@@ -14,13 +14,15 @@
 
 ;;; Commentary:
 ;; These are some tests for tramp-hdfs.
+;; "node-1" should be mapped to running HDFS instance via /etc/hosts.
+;;
 ;;
 ;;; Code:
 (require 'tramp-hdfs)
 (require 'ert)
 (ert-deftest hdfs-test-expand-file-name1 ()
   "Tests the expand-file-name for hdfs."
-  (should (equal (expand-file-name "/hdfs:node-1:"             "/tmp") "/hdfs:root@node-1:/"))
+  (should (equal (expand-file-name "/hdfs:node-1:"             "/tmp") (format "/hdfs:%s@node-1:/" (user-login-name))))
   (should (equal (expand-file-name "/hdfs:root@node-1:"        "/Users") "/hdfs:root@node-1:/" ))
   (should (equal (expand-file-name "/hdfs:root@node-1:"        nil)      "/hdfs:root@node-1:/" ))
   (should (equal (expand-file-name "/hdfs:root@node-1:/"       "/Users") "/hdfs:root@node-1:/" ))
