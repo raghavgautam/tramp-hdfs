@@ -34,6 +34,7 @@
 (require 'tramp-sh)
 (require 'time-date)
 (require 'json)
+(require 'subr-x)
 (require 'url)
 
 ;; Pacify byte-compiler.
@@ -54,6 +55,22 @@
 
 (defconst hdfs-delete-op "DELETE"
   "Rest operation for deleting a file/dir.")
+
+
+(defcustom tramp-hdfs-curl-program "curl"
+  "Command to invoke curl.
+
+Set to nil to use the built-in 'url package."
+  :group 'tramp-hdfs
+  :type 'file)
+
+(defcustom tramp-hdfs-curl-options
+  '("-k" "-s" "-S" "-L")
+  "List of options for `tramp-hdfs-curl-program'.
+
+To use Kerberos SPNEGO authentication, add the following: \"--negotiate\" \"-u\" \":\"."
+  :group 'tramp-hdfs
+  :type '(repeat string))
 
 (defcustom hdfs-default-dir "/"
   "HDFS default directory."
@@ -212,27 +229,22 @@ Optional argument ARGS is a list of arguments to pass to the OPERATION."
   (tramp-hdfs-do-rest-call "PUT" url vec))
 ;;(tramp-hdfs-put-url-get-redirect "http://node-1:50070/webhdfs/v1/tmp/test2.txt?user.name=rgautam&op=CREATE")
 
-(require 'subr-x)
-(defconst tramp-hdfs-curl-path
-  (let ((curl-bin (string-trim (shell-command-to-string "which curl"))))
-    (when (>= (length curl-bin) 4)
-	curl-bin)))
-
 ;;(tramp-hdfs-do-rest-call "GET" "http://node-1:50070/webhdfs/v1/?user.name=root&op=LISTSTATUS" nil)
 ;;(tramp-hdfs-do-rest-call "GET" "http://node-1:50070/webhdfs/v1/?user.name=hdfs&op=GETFILESTATUS" nil)
 ;;(tramp-hdfs-do-rest-call "GET" "http://node-1:50070/webhdfs/v1/?user.name=hdfs&op=LISTSTATUS" nil)
-;;(let ((tramp-hdfs-curl-path nil))(tramp-hdfs-do-rest-call "GET" "http://google.com" nil))
+;;(let ((tramp-hdfs-curl-program nil))(tramp-hdfs-do-rest-call "GET" "http://google.com" nil))
+
 (defun tramp-hdfs-do-rest-call (method url vec)
   "Do a rest call using method METHOD to the url & return the results."
   (tramp-message vec 10 "Method: %s Url: %s" method url)
   (let ((response
-	 (if tramp-hdfs-curl-path
-	     (progn
-	       (tramp-message vec 10 "Command: %s -k -sSL -X %s %s" tramp-hdfs-curl-path method url)
+	 (if tramp-hdfs-curl-program
+             (let ((args (append tramp-hdfs-curl-options (list "-X" method url))))
+	       (tramp-message vec 10 "Command: %s %s" tramp-hdfs-curl-program args)
 	       (string-trim (with-output-to-string
 			      (with-current-buffer
 				  standard-output
-				(call-process tramp-hdfs-curl-path nil t nil "-k" "-sSL" "-X" method url)))))
+                                (apply #'call-process tramp-hdfs-curl-program nil t nil args)))))
 	   (let* ((url-request-method method)
 		  (url-http-attempt-keepalives nil)
 		  (buff (url-retrieve-synchronously url))
@@ -240,7 +252,7 @@ Optional argument ARGS is a list of arguments to pass to the OPERATION."
 	     (with-current-buffer (url-retrieve-synchronously url)
 	       (tramp-hdfs-delete-http-header* (current-buffer))
 	       (buffer-string))))))
-    (tramp-message vec 10 "Method: %s Url: %s Reponse: %s" method url response)
+    (tramp-message vec 10 "Method: %s Url: %s Response: %s" method url response)
     response))
 
 (defconst http-header-regexp "^\\([^ :]+\\): \\(.*\\)$")
@@ -338,7 +350,10 @@ Optional argument SUFFIX extra arguments to be appended to url."
     (setq path (concat "/" path)))
   (let ((url (concat
 	      ;;http://node-1:57000/webhdfs/v1
-	      (format "%s://%s:%s%s" webhdfs-protocol (tramp-file-name-host v) (or (tramp-file-name-port v) (number-to-string webhdfs-port)) webhdfs-endpoint)
+	      (format "%s://%s:%s%s" webhdfs-protocol
+                      (tramp-file-name-host v)
+                      (or (tramp-file-name-port v) (number-to-string webhdfs-port))
+                      webhdfs-endpoint)
 	      ;;/tmp?user.name=root&op=OPEN
 	      (format "%s?user.name=%s&op=%s"  path (tramp-file-name-user v) op)
 	      (when suffix "&") suffix)))

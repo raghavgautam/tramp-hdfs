@@ -14,8 +14,6 @@
 
 ;;; Commentary:
 ;; These are some tests for tramp-hdfs.
-;; "node-1" should be mapped to running HDFS instance via /etc/hosts.
-;;
 ;;
 ;;; Code:
 (require 'tramp-hdfs)
