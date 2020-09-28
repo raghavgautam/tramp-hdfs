@@ -504,8 +504,8 @@ These are all file names in directory DIRECTORY which begin with FILE."
   (with-parsed-tramp-file-name directory nil
     ;; We must also flush the cache of the directory, because
     ;; `file-attributes' reads the values from there.
-    (tramp-flush-file-property v (file-name-directory localname))
-    (tramp-flush-directory-property v localname)
+    (tramp-flush-file-properties v (file-name-directory localname))
+    (tramp-flush-directory-properties v localname)
     (let ((url (tramp-hdfs-create-url
 		localname
 		hdfs-delete-op
@@ -520,8 +520,8 @@ These are all file names in directory DIRECTORY which begin with FILE."
     (with-parsed-tramp-file-name filename nil
       ;; We must also flush the cache of the directory, because
       ;; `file-attributes' reads the values from there.
-      (tramp-flush-file-property v (file-name-directory localname))
-      (tramp-flush-file-property v localname)
+      (tramp-flush-file-properties v (file-name-directory localname))
+      (tramp-flush-file-properties v localname)
       (let ((url (tramp-hdfs-create-url
 		localname
 		hdfs-delete-op
