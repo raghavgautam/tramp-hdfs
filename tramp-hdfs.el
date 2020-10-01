@@ -34,6 +34,7 @@
 (require 'tramp-sh)
 (require 'time-date)
 (require 'json)
+(require 'subr-x)
 (require 'url)
 
 ;; Pacify byte-compiler.
@@ -54,6 +55,22 @@
 
 (defconst hdfs-delete-op "DELETE"
   "Rest operation for deleting a file/dir.")
+
+
+(defcustom tramp-hdfs-curl-program "curl"
+  "Command to invoke curl.
+
+Set to nil to use the built-in 'url package."
+  :group 'tramp-hdfs
+  :type 'file)
+
+(defcustom tramp-hdfs-curl-options
+  '("-k" "-s" "-S" "-L")
+  "List of options for `tramp-hdfs-curl-program'.
+
+To use Kerberos SPNEGO authentication, add the following: \"--negotiate\" \"-u\" \":\"."
+  :group 'tramp-hdfs
+  :type '(repeat string))
 
 (defcustom hdfs-default-dir "/"
   "HDFS default directory."
@@ -132,7 +149,7 @@
     (file-notify-add-watch . tramp-handle-file-notify-add-watch)
     (file-notify-rm-watch . tramp-handle-file-notify-rm-watch)
     (file-ownership-preserved-p . ignore)
-    (file-readable-p . tramp-hdfs-handle-file-readable-p)
+    (file-readable-p . tramp-handle-file-exists-p)
     (file-regular-p . tramp-handle-file-regular-p)
     (file-remote-p . tramp-handle-file-remote-p)
     ;; `file-selinux-context' performed by default handler.
@@ -156,7 +173,7 @@
     (set-visited-file-modtime . tramp-handle-set-visited-file-modtime)
     (shell-command . ignore)
     (start-file-process . ignore)
-    (unhandled-file-name-directory . tramp-handle-unhandled-file-name-directory)
+    (unhandled-file-name-directory . ignore)
     (vc-registered . ignore)
     (verify-visited-file-modtime . tramp-handle-verify-visited-file-modtime)
     (write-region . ignore))
@@ -170,15 +187,6 @@ Operations not mentioned here will be handled by the default Emacs primitives.")
   "Check if it's a FILENAME for hdfs servers."
   (string= (tramp-file-name-method (tramp-dissect-file-name filename))
 	   tramp-hdfs-method))
-
-(defun tramp-hdfs-handle-file-readable-p (filename)
-  "Like `file-readable-p' for Tramp files."
-  (with-parsed-tramp-file-name filename nil
-    (with-tramp-file-property v localname "file-readable-p"
-      ;; Examine `file-attributes' cache to see if request can be
-      ;; satisfied without remote operation.
-      ;;TODO we need to do actual check using rest calls
-      (tramp-check-cached-permissions v ?r))))
 
 
 ;;;###tramp-autoload
@@ -221,27 +229,22 @@ Optional argument ARGS is a list of arguments to pass to the OPERATION."
   (tramp-hdfs-do-rest-call "PUT" url vec))
 ;;(tramp-hdfs-put-url-get-redirect "http://node-1:50070/webhdfs/v1/tmp/test2.txt?user.name=rgautam&op=CREATE")
 
-(require 'subr-x)
-(defconst tramp-hdfs-curl-path
-  (let ((curl-bin (string-trim (shell-command-to-string "which curl"))))
-    (when (>= (length curl-bin) 4)
-	curl-bin)))
-
 ;;(tramp-hdfs-do-rest-call "GET" "http://node-1:50070/webhdfs/v1/?user.name=root&op=LISTSTATUS" nil)
 ;;(tramp-hdfs-do-rest-call "GET" "http://node-1:50070/webhdfs/v1/?user.name=hdfs&op=GETFILESTATUS" nil)
 ;;(tramp-hdfs-do-rest-call "GET" "http://node-1:50070/webhdfs/v1/?user.name=hdfs&op=LISTSTATUS" nil)
-;;(let ((tramp-hdfs-curl-path nil))(tramp-hdfs-do-rest-call "GET" "http://google.com" nil))
+;;(let ((tramp-hdfs-curl-program nil))(tramp-hdfs-do-rest-call "GET" "http://google.com" nil))
+
 (defun tramp-hdfs-do-rest-call (method url vec)
   "Do a rest call using method METHOD to the url & return the results."
   (tramp-message vec 10 "Method: %s Url: %s" method url)
   (let ((response
-	 (if tramp-hdfs-curl-path
-	     (progn
-	       (tramp-message vec 10 "Command: %s -k -sSL --negotiate -u : -X %s %s" tramp-hdfs-curl-path method url)
+	 (if tramp-hdfs-curl-program
+             (let ((args (append tramp-hdfs-curl-options (list "-X" method url))))
+	       (tramp-message vec 10 "Command: %s %s" tramp-hdfs-curl-program args)
 	       (string-trim (with-output-to-string
 			      (with-current-buffer
 				  standard-output
-				(call-process tramp-hdfs-curl-path nil t nil "-k" "-sSL" "--negotiate" "-u" ":"  "-X" method url)))))
+                                (apply #'call-process tramp-hdfs-curl-program nil t nil args)))))
 	   (let* ((url-request-method method)
 		  (url-http-attempt-keepalives nil)
 		  (buff (url-retrieve-synchronously url))
@@ -249,7 +252,7 @@ Optional argument ARGS is a list of arguments to pass to the OPERATION."
 	     (with-current-buffer (url-retrieve-synchronously url)
 	       (tramp-hdfs-delete-http-header* (current-buffer))
 	       (buffer-string))))))
-    (tramp-message vec 10 "Method: %s Url: %s Reponse: %s" method url response)
+    (tramp-message vec 10 "Method: %s Url: %s Response: %s" method url response)
     response))
 
 (defconst http-header-regexp "^\\([^ :]+\\): \\(.*\\)$")
@@ -305,11 +308,10 @@ Optional argument DIR The directory to use for expansion. If nil use present wor
       (let ((directory-sep-char ?/)
 	    (default-directory (tramp-compat-temporary-file-directory)))
 	(tramp-make-tramp-file-name
-	 method user host
+         v
 	 (tramp-drop-volume-letter
 	  (tramp-run-real-handler
-	   'expand-file-name (list localname)))
-	 hop)))))
+	   'expand-file-name (list localname))))))))
 
 (defun tramp-hdfs-handle-file-attributes (filename &optional id-format)
   "Like `file-attributes' for Tramp files.
@@ -348,7 +350,10 @@ Optional argument SUFFIX extra arguments to be appended to url."
     (setq path (concat "/" path)))
   (let ((url (concat
 	      ;;http://node-1:57000/webhdfs/v1
-	      (format "%s://%s:%s%s" webhdfs-protocol (tramp-file-name-real-host v) (or (tramp-file-name-port v) (number-to-string webhdfs-port)) webhdfs-endpoint)
+	      (format "%s://%s:%s%s" webhdfs-protocol
+                      (tramp-file-name-host v)
+                      (or (tramp-file-name-port v) (number-to-string webhdfs-port))
+                      webhdfs-endpoint)
 	      ;;/tmp?user.name=root&op=OPEN
 	      (format "%s?user.name=%s&op=%s"  path (tramp-file-name-user v) op)
 	      (when suffix "&") suffix)))
@@ -411,7 +416,6 @@ FILENAME the filename to be copied locally."
        v 'file-error
        "Cannot make local copy of non-existing file `%s'" filename))
     (let* ((size (nth 7 (file-attributes (file-truename filename))))
-	   (localname (tramp-hdfs-get-filename v))
 	   (url-size-params (tramp-hdfs-get-size-params size))
 	   (url (tramp-hdfs-create-url localname hdfs-open-op v url-size-params))
 	   (content (tramp-hdfs-get-url-content url v))
@@ -465,16 +469,16 @@ These are all file names in directory DIRECTORY which begin with FILE."
      (or size "0") ; size
      (format-time-string
       (if (time-less-p
-	   (time-subtract (current-time) mtime)
-	   tramp-half-a-year)
+           ;; Half a year
+	   (time-since mtime) (days-to-time 183))
 	  "%b %e %R"
-	"%b %e  %Y")
+	"%b %e %Y")
       mtime)
      filename)))
 
 (defun tramp-hdfs-list-directory (v)
   "List files of a hdfs dir."
-  (let* ((url (tramp-hdfs-create-url (tramp-hdfs-get-filename v) hdfs-list-op v))
+  (let* ((url (tramp-hdfs-create-url (tramp-file-name-localname v) hdfs-list-op v))
 	 (retval (tramp-hdfs-json-to-lisp (tramp-hdfs-get-url-content url v) v)))
     (cdadar retval)))
 
@@ -500,10 +504,10 @@ These are all file names in directory DIRECTORY which begin with FILE."
   (with-parsed-tramp-file-name directory nil
     ;; We must also flush the cache of the directory, because
     ;; `file-attributes' reads the values from there.
-    (tramp-flush-file-property v (file-name-directory localname))
-    (tramp-flush-directory-property v localname)
+    (tramp-flush-file-properties v (file-name-directory localname))
+    (tramp-flush-directory-properties v localname)
     (let ((url (tramp-hdfs-create-url
-		(tramp-hdfs-get-filename v)
+		localname
 		hdfs-delete-op
 		v
 		(if recursive "recursive=true" "recursive=false"))))
@@ -516,19 +520,14 @@ These are all file names in directory DIRECTORY which begin with FILE."
     (with-parsed-tramp-file-name filename nil
       ;; We must also flush the cache of the directory, because
       ;; `file-attributes' reads the values from there.
-      (tramp-flush-file-property v (file-name-directory localname))
-      (tramp-flush-file-property v localname)
+      (tramp-flush-file-properties v (file-name-directory localname))
+      (tramp-flush-file-properties v localname)
       (let ((url (tramp-hdfs-create-url
-		(tramp-hdfs-get-filename v)
+		localname
 		hdfs-delete-op
 		v
 		"recursive=false")))
 	(tramp-hdfs-json-to-lisp (tramp-hdfs-delete-url url v) v)))))
-
-;; Internal file name functions.
-(defun tramp-hdfs-get-filename (vec)
-  "Returns the file name of vec."
-  (elt vec 3))
 
 (add-hook 'tramp-unload-hook
 	  (lambda ()

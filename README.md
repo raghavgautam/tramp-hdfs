@@ -32,7 +32,7 @@ As a general advice refrain from using superuser accounts like hdfs, hadaoop.
 * Through melpa:
 Ensure you have melpa in your package-archives
 (see [Melpa Installation](http://melpa.org/#/getting-started)).
-Then, M-x package-install [RET] tramp-hdfs. 
+Then, M-x package-install [RET] tramp-hdfs.
 
 ## Run inside docker
 ```bash
@@ -40,6 +40,9 @@ docker run -it --rm -v `pwd`:/root/.emacs.d silex/emacs
 ```
 
 ## Run tests
+* Test assume a running HDFS instance at host "node-1".  You will need
+to map this name to your actual instance via /etc/hosts or some other
+mechanism.
 ```bash
 docker run -it --rm -v `pwd`:/root/.emacs.d silex/emacs --batch -l ert -l /root/.emacs.d/tramp-hdfs.el -l /root/.emacs.d/tramp-hdfs-tests.el -f ert-run-tests-batch-and-exit
 ```
