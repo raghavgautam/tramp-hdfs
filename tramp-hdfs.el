@@ -195,21 +195,36 @@ Operations not mentioned here will be handled by the default Emacs primitives.")
 First arg specifies the OPERATION, second arg is a list of arguments to
 pass to the OPERATION.
 Optional argument ARGS is a list of arguments to pass to the OPERATION."
-  (when (and tramp-locked (not tramp-locker))
-    (setq tramp-locked nil)
-    (tramp-error
-     (car-safe tramp-current-connection) 'file-error
-     "Forbidden reentrant call of Tramp"))
-  (let ((tl tramp-locked))
-    (setq tramp-locked t)
-    (unwind-protect
-	(let ((tramp-locker t))
-	  (save-match-data
-	    (let ((fn (assoc operation tramp-hdfs-file-name-handler-alist)))
-	      (if fn
-		  (apply (cdr fn) args)
-		(tramp-run-real-handler operation args)))))
-      (setq tramp-locked tl))))
+  (if (not (boundp 'tramp-locked))
+      (tramp-hdfs-file-name-handler-nolock operation args)
+    ;; This is compatibility code for Emacs versions before 26, in
+    ;; which specific Tramp modules did locking.  In Emacs 26 (see
+    ;; commit 138447c3abd749d1c27d99d7089b1b0903352ade) locking was
+    ;; moved to tramp-file-name-handler, so this code can be removed
+    ;; when support for these older Emacsen is dropped.
+    ;;
+    ;; The global lock was implemented via two variables:
+    ;; `tramp-locked' (non-nil if global lock taken by someone) and
+    ;; `tramp-locker' (actual locker let-bounds it to non-nil so that
+    ;; it may call tramp recursively).
+    (when (and tramp-locked (not tramp-locker))
+      (setq tramp-locked nil)
+      (tramp-error
+       (car-safe tramp-current-connection) 'file-error
+       "Forbidden reentrant call of Tramp"))
+    (let ((tl tramp-locked))
+      (setq tramp-locked t)
+      (unwind-protect
+	  (let ((tramp-locker t))
+            (tramp-hdfs-file-name-handler-nolock operation args))
+        (setq tramp-locked tl)))))
+
+(defun tramp-hdfs-file-name-handler-nolock (operation args)
+  (save-match-data
+    (let ((fn (assoc operation tramp-hdfs-file-name-handler-alist)))
+      (if fn
+	  (apply (cdr fn) args)
+	(tramp-run-real-handler operation args)))))
 
 ;;;###tramp-autoload
 (add-to-list 'tramp-foreign-file-name-handler-alist
